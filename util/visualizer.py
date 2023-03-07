@@ -5,6 +5,7 @@ import ntpath
 import time
 from . import util, html
 from subprocess import Popen, PIPE
+import h5py
 
 
 try:
@@ -80,6 +81,11 @@ class Visualizer():
         self.current_epoch = 0
         self.ncols = opt.display_ncols
 
+        if opt.dataset_mode == 'unaligned_3d':
+            self.display_current_results = self.display_current_results_3d
+        else:
+            self.display_current_results = self.display_current_results_2d
+
         if self.display_id > 0:  # connect to a visdom server given <display_port> and <display_server>
             import visdom
             self.vis = visdom.Visdom(server=opt.display_server, port=opt.display_port, env=opt.display_env)
@@ -93,8 +99,12 @@ class Visualizer():
         if self.use_html:  # create an HTML object at <checkpoints_dir>/web/; images will be saved under <checkpoints_dir>/web/images/
             self.web_dir = os.path.join(opt.checkpoints_dir, opt.name, 'web')
             self.img_dir = os.path.join(self.web_dir, 'images')
+            self.image_file = os.path.join(self.img_dir, 'images.h5')
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
+            if opt.dataset_mode == 'unaligned_3d' and not os.path.isfile(self.image_file):
+                f = h5py.File(self.image_file, 'w-')
+                f.close()
         # create a logging file to store training losses
         self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
         with open(self.log_name, "a") as log_file:
@@ -112,7 +122,7 @@ class Visualizer():
         print('Command: %s' % cmd)
         Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
 
-    def display_current_results(self, visuals, epoch, save_result):
+    def display_current_results_2d(self, visuals, epoch, save_result, total_iters):
         """Display current results on visdom; save current results to an HTML file.
 
         Parameters:
@@ -209,6 +219,14 @@ class Visualizer():
                     links.append(img_path)
                 webpage.add_images(ims, txts, links, width=self.win_size)
             webpage.save()
+
+    def display_current_results_3d(self, visuals, epoch, save_result, total_iters):
+        if self.use_html and (save_result or not self.saved):
+            self.saved = True
+            with h5py.File(self.image_file, 'a') as f:
+                g = f.create_group(f'epoch_{epoch}_iter_{total_iters}')
+                for label, image in visuals.items():
+                    g.create_dataset(label, data=image.cpu().detach().numpy())
 
     def plot_current_losses(self, epoch, counter_ratio, losses):
         """display the current losses on visdom display: dictionary of error labels and values
