@@ -81,6 +81,8 @@ class Unaligned3dDataset(BaseDataset):
             self.init_samples_no_mask('B')
             self.B_mask = None
         
+        assert self.samples_per_image_A[-1] > 0 and self.samples_per_image_B[-1] > 0, \
+            "One of the datasets is empty (could be due to a mask)"
         self.len = int(max(self.samples_per_image_A[-1], self.samples_per_image_B[-1]))
 
     def init_samples_no_mask(self, side: Literal['A'] | Literal['B']):
