@@ -6,12 +6,13 @@ import time
 from . import util, html
 from subprocess import Popen, PIPE
 import h5py
+from util.logging_config import logging
 
 
 try:
     import wandb
 except ImportError:
-    print('Warning: wandb package cannot be found. The option "--use_wandb" will result in error.')
+    logging.warn('Warning: wandb package cannot be found. The option "--use_wandb" will result in error.')
 
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
@@ -100,7 +101,7 @@ class Visualizer():
             self.web_dir = os.path.join(opt.checkpoints_dir, opt.name, 'web')
             self.img_dir = os.path.join(self.web_dir, 'images')
             self.image_file = os.path.join(self.img_dir, 'images.h5')
-            print('create web directory %s...' % self.web_dir)
+            logging.info('create web directory %s...', self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
             if opt.dataset_mode == 'unaligned_3d' and not os.path.isfile(self.image_file):
                 f = h5py.File(self.image_file, 'w-')
@@ -118,8 +119,8 @@ class Visualizer():
     def create_visdom_connections(self):
         """If the program could not connect to Visdom server, this function will start a new server at port < self.port > """
         cmd = sys.executable + ' -m visdom.server -p %d &>/dev/null &' % self.port
-        print('\n\nCould not connect to Visdom server. \n Trying to start a server....')
-        print('Command: %s' % cmd)
+        logging.info('Could not connect to Visdom server. Trying to start a server....')
+        logging.info('Command: %s', cmd)
         Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
 
     def display_current_results_2d(self, visuals, epoch, save_result, total_iters):
@@ -270,6 +271,6 @@ class Visualizer():
         for k, v in losses.items():
             message += '%s: %.3f ' % (k, v)
 
-        print(message)  # print the message
+        logging.info(message)  # print the message
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message

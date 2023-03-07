@@ -6,6 +6,7 @@ from warnings import warn
 from zipfile import ZipFile
 from bs4 import BeautifulSoup
 from os.path import abspath, isdir, join, basename
+from util.logging_config import logging
 
 
 class GetData(object):
@@ -34,7 +35,7 @@ class GetData(object):
 
     def _print(self, text):
         if self._verbose:
-            print(text)
+            logging.info(text)
 
     @staticmethod
     def _get_options(r):

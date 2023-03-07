@@ -2,10 +2,11 @@
 # such as training, testing, saving and loading
 # runs without errors.
 import os
+from util.logging_config import logging
 
 
 def run(command):
-    print(command)
+    logging.info(command)
     exit_status = os.system(command)
     if exit_status > 0:
         exit(1)

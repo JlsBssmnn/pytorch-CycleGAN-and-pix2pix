@@ -6,6 +6,7 @@ import scipy.misc
 from PIL import Image
 from util import segrun, fast_hist, get_scores
 from cityscapes import cityscapes
+from util.logging_config import logging
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--cityscapes_dir", type=str, required=True, help="Path to the original cityscapes dataset")
@@ -37,7 +38,7 @@ def main():
     hist_perframe = np.zeros((n_cl, n_cl))
     for i, idx in enumerate(label_frames):
         if i % 10 == 0:
-            print('Evaluating: %d/%d' % (i, len(label_frames)))
+            logging.info('Evaluating: %d/%d', i, len(label_frames))
         city = idx.split('_')[0]
         # idx is city_shot_frame
         label = CS.load_label(args.split, city, idx)

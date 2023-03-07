@@ -8,6 +8,7 @@ import torch.utils.data as data
 from PIL import Image
 import torchvision.transforms as transforms
 from abc import ABC, abstractmethod
+from util.logging_config import logging
 
 
 class BaseDataset(data.Dataset, ABC):
@@ -160,8 +161,8 @@ def __flip(img, flip):
 def __print_size_warning(ow, oh, w, h):
     """Print warning information about image size(only print once)"""
     if not hasattr(__print_size_warning, 'has_printed'):
-        print("The image size needs to be a multiple of 4. "
+        logging.warn("The image size needs to be a multiple of 4. "
               "The loaded image size was (%d, %d), so it was adjusted to "
               "(%d, %d). This adjustment will be done to all images "
-              "whose sizes are not multiples of 4" % (ow, oh, w, h))
+              "whose sizes are not multiples of 4", ow, oh, w, h)
         __print_size_warning.has_printed = True

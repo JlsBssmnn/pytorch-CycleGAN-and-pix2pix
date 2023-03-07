@@ -16,6 +16,7 @@ import os
 import argparse
 import sys
 import scipy.io as sio
+from util.logging_config import logging
 
 
 def parse_args():
@@ -33,19 +34,19 @@ def parse_args():
 
 args = parse_args()
 for arg in vars(args):
-    print('[%s] =' % arg, getattr(args, arg))
+    logging.info('[%s] = %s', arg, getattr(args, arg))
 # Make sure that caffe is on the python path:
 caffe_root = args.caffe_root   # this file is expected to be in {caffe_root}/examples/hed/
 sys.path.insert(0, caffe_root + 'python')
 
 
 if not os.path.exists(args.hed_mat_dir):
-    print('create output directory %s' % args.hed_mat_dir)
+    logging.info('create output directory %s', args.hed_mat_dir)
     os.makedirs(args.hed_mat_dir)
 
 imgList = os.listdir(args.images_dir)
 nImgs = len(imgList)
-print('#images = %d' % nImgs)
+logging.info('#images = %d', nImgs)
 
 caffe.set_mode_gpu()
 caffe.set_device(args.gpu_id)
@@ -56,7 +57,7 @@ border = args.border
 
 for i in range(nImgs):
     if i % 500 == 0:
-        print('processing image %d/%d' % (i, nImgs))
+        logging.info('processing image %d/%d', (i, nImgs))
     im = Image.open(os.path.join(args.images_dir, imgList[i]))
 
     in_ = np.array(im, dtype=np.float32)
