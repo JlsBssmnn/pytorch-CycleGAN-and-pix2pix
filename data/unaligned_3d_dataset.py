@@ -19,6 +19,7 @@ import torch
 from sortedcontainers import SortedDict
 from data.base_dataset import BaseDataset
 from data.h5_folder import get_datasets
+from util.logging_config import logging
 
 
 class Unaligned3dDataset(BaseDataset):
@@ -42,6 +43,7 @@ class Unaligned3dDataset(BaseDataset):
         parser.add_argument('--datasetB_names', type=str, nargs='+', help='The names of the datasets in the file that belong to dataset B')
         parser.add_argument('--datasetA_mask', type=str, default=None, help='The name of the dataset to use as mask for dataset A')
         parser.add_argument('--datasetB_mask', type=str, default=None, help='The name of the dataset to use as mask for dataset B')
+        parser.add_argument('--dataset_length', type=str, default='max', choices=['min', 'max'], help='How to determine the size of the entire dataset given the sizes of dataset A and dataset B')
 
         return parser
 
@@ -83,7 +85,14 @@ class Unaligned3dDataset(BaseDataset):
         
         assert self.samples_per_image_A[-1] > 0 and self.samples_per_image_B[-1] > 0, \
             "One of the datasets is empty (could be due to a mask)"
-        self.len = int(max(self.samples_per_image_A[-1], self.samples_per_image_B[-1]))
+
+        if opt.dataset_length == 'min':
+            self.len = int(min(self.samples_per_image_A[-1], self.samples_per_image_B[-1]))
+        elif opt.dataset_length == 'max':
+            self.len = int(max(self.samples_per_image_A[-1], self.samples_per_image_B[-1]))
+        else:
+            logging.error('Invalid dataset_length parameter!')
+            exit(1)
 
     def init_samples_no_mask(self, side: Literal['A'] | Literal['B']):
         setattr(self, 'samples_per_image_' + side, [])

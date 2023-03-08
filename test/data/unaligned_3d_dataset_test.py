@@ -27,6 +27,7 @@ class TestOptions:
   datasetB_names = None
   datasetA_mask = None
   datasetB_mask = None
+  dataset_length = 'max'
 
   def __init__(self, sample_size=None):
     if sample_size is not None:
