@@ -225,9 +225,19 @@ class Visualizer():
         if self.use_html and (save_result or not self.saved):
             self.saved = True
             with h5py.File(self.image_file, 'a') as f:
-                g = f.create_group(f'epoch_{epoch}_iter_{total_iters}')
+                group_name = f'epoch_{epoch}_iter_{total_iters}'
+                if group_name in f:
+                    del f[group_name]
+                g = f.create_group(group_name)
+
                 for label, image in visuals.items():
-                    g.create_dataset(label, data=image.cpu().detach().numpy())
+                    image = image.cpu().detach().numpy()
+                    if image.shape[0] == 1:
+                        image = image[0]
+                    image += 1
+                    image *= 127.5
+                    image = image.astype(np.uint8)
+                    g.create_dataset(label, data=image)
 
     def plot_current_losses(self, epoch, counter_ratio, losses):
         """display the current losses on visdom display: dictionary of error labels and values
