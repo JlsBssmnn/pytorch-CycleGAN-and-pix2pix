@@ -52,6 +52,7 @@ class Config:
     no_dropout = True
     no_flip = False
     no_html = False
+    no_normalization = False
     norm = 'instance'
     num_threads = 4
     output_nc = 1

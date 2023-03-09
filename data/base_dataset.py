@@ -4,6 +4,7 @@ It also includes common transformation functions (e.g., get_transform, __scale_w
 """
 import random
 import numpy as np
+import torch
 import torch.utils.data as data
 from PIL import Image
 import torchvision.transforms as transforms
@@ -111,6 +112,29 @@ def get_transform(opt, params=None, grayscale=False, method=transforms.Interpola
         else:
             transform_list += [transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     return transforms.Compose(transform_list)
+
+
+def get_transform_3d(opt, params=None, grayscale=False, method=transforms.InterpolationMode.BICUBIC, convert=True):
+    transform_list = []
+    if opt.no_normalization:
+        transform_list += [torch.tensor]
+        return transforms.Compose(transform_list)
+
+    if convert:
+        transform_list += [transforms.Lambda(__ToTensor)]
+        transform_list += [transforms.Lambda(__normalize_equally)]
+    return transforms.Compose(transform_list)
+
+
+# basically equivalent to transforms.ToTensor
+def __ToTensor(np_array):
+    _min = np_array.min()
+    _max = np_array.max()
+    return torch.tensor((np_array - _min) / (_max + _min), dtype=torch.float32)
+
+# basically equivalent to transforms.Normalize with 0.5 for all channels
+def __normalize_equally(tensor):
+    return (tensor - 0.5) / 0.5
 
 
 def __transforms2pil_resize(method):

@@ -17,7 +17,7 @@ from typing import Literal
 import numpy as np
 import torch
 from sortedcontainers import SortedDict
-from data.base_dataset import BaseDataset
+from data.base_dataset import BaseDataset, get_transform_3d
 from data.h5_folder import get_datasets
 from util.logging_config import logging
 
@@ -44,6 +44,7 @@ class Unaligned3dDataset(BaseDataset):
         parser.add_argument('--datasetA_mask', type=str, default=None, help='The name of the dataset to use as mask for dataset A')
         parser.add_argument('--datasetB_mask', type=str, default=None, help='The name of the dataset to use as mask for dataset B')
         parser.add_argument('--dataset_length', type=str, default='max', choices=['min', 'max'], help='How to determine the size of the entire dataset given the sizes of dataset A and dataset B')
+        parser.add_argument('--no_normalization', action='store_true', help='If specified the samples are not normalized')
 
         return parser
 
@@ -60,8 +61,8 @@ class Unaligned3dDataset(BaseDataset):
         """
         # save the option and dataset root
         BaseDataset.__init__(self, opt)
-        self.A_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'A', opt.datasetA_file), opt.datasetA_names, [opt.datasetA_mask], dtype=np.float32)
-        self.B_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'B', opt.datasetB_file), opt.datasetB_names, [opt.datasetB_mask], dtype=np.float32)
+        self.A_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'A', opt.datasetA_file), opt.datasetA_names, [opt.datasetA_mask])
+        self.B_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'B', opt.datasetB_file), opt.datasetB_names, [opt.datasetB_mask])
 
         offset_slicing = tuple([slice(offset, -offset if offset > 0 else None) for offset in opt.border_offset])
         self.A_images = [arr[offset_slicing] for arr in self.A_images]
@@ -93,6 +94,11 @@ class Unaligned3dDataset(BaseDataset):
         else:
             logging.error('Invalid dataset_length parameter!')
             exit(1)
+
+        input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
+        output_nc = self.opt.input_nc if self.opt.direction == 'BtoA' else self.opt.output_nc
+        self.transform_A = get_transform_3d(self.opt, grayscale=(input_nc == 1))
+        self.transform_B = get_transform_3d(self.opt, grayscale=(output_nc == 1))
 
     def init_samples_no_mask(self, side: Literal['A'] | Literal['B']):
         setattr(self, 'samples_per_image_' + side, [])
@@ -190,8 +196,11 @@ class Unaligned3dDataset(BaseDataset):
         A_shape = self.sample_shape_A[A_image_index]
         B_shape = self.sample_shape_B[B_image_index]
 
-        A = torch.from_numpy(self.A_images[A_image_index][self.get_nth_sample(A_shape, A_index_in_image)])
-        B = torch.from_numpy(self.B_images[B_image_index][self.get_nth_sample(B_shape, B_index_in_image)])
+        A_img = self.A_images[A_image_index][self.get_nth_sample(A_shape, A_index_in_image)]
+        B_img = self.B_images[B_image_index][self.get_nth_sample(B_shape, B_index_in_image)]
+        A = self.transform_A(A_img)
+        B = self.transform_B(B_img)
+
         return {'A': A, 'B': B, 'A_image': A_image_index,  'B_image': B_image_index}
 
     def __len__(self):

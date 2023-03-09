@@ -1,3 +1,4 @@
+from operator import itemgetter
 import unittest
 import h5py
 import os
@@ -22,6 +23,10 @@ class TestOptions:
   phase = 'train'
   datasetA_file = 'test.h5'
   datasetB_file = 'test.h5'
+  direction = 'AtoB'
+  input_nc = 1
+  output_nc = 1
+  no_normalization = True
   sample_size = [3, 10, 7]
   datasetA_names = None
   datasetB_names = None
@@ -190,6 +195,18 @@ class Unaligned3dDatasetTest(unittest.TestCase):
     self.assertEqual(dataset[209]['A'][0, 0, 0], 1116)
     self.assertEqual(dataset[209]['B'][0, 0, 0], 5116)
 
+  def test_normalization(self):
+    create_train_data()
+    opt = TestOptions([2, 3, 4])
+    opt.no_normalization = False
+    dataset = Unaligned3dDataset(opt)
+
+    for i in range(100):
+      A, B = itemgetter('A', 'B')(dataset[i])
+      self.assertLessEqual(A.max(), 1)
+      self.assertGreaterEqual(A.min(), -1)
+      self.assertLessEqual(B.max(), 1)
+      self.assertGreaterEqual(B.min(), -1)
     
   def setUp(self) -> None:
     clear_tmp()
