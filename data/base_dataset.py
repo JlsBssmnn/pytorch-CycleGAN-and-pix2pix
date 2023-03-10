@@ -121,19 +121,20 @@ def get_transform_3d(opt, params=None, grayscale=False, method=transforms.Interp
         return transforms.Compose(transform_list)
 
     if convert:
-        transform_list += [transforms.Lambda(__ToTensor)]
-        transform_list += [transforms.Lambda(__normalize_equally)]
+        transform_list += [transforms.Lambda(ToTensor)]
+        transform_list += [transforms.Lambda(normalize_equally)]
     return transforms.Compose(transform_list)
 
 
 # basically equivalent to transforms.ToTensor
-def __ToTensor(np_array):
-    _min = np_array.min()
-    _max = np_array.max()
-    return torch.tensor((np_array - _min) / (_max + _min), dtype=torch.float32)
+def ToTensor(np_array):
+    if np_array.dtype == np.uint8:
+        return torch.tensor(np_array / 255, dtype=torch.float32)
+    else:
+        return torch.tensor(np_array, dtype=torch.float32)
 
 # basically equivalent to transforms.Normalize with 0.5 for all channels
-def __normalize_equally(tensor):
+def normalize_equally(tensor):
     return (tensor - 0.5) / 0.5
 
 
