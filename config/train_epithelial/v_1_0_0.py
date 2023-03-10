@@ -16,7 +16,7 @@ class Config:
     dataset_mode = 'unaligned_3d'
     direction = 'AtoB'
     display_env = 'main'
-    display_freq = 400
+    display_freq = 10_000
     display_id = -1
     display_ncols = 4
     display_port = 8097
@@ -66,7 +66,7 @@ class Config:
     save_latest_freq = 5000
     serial_batches = True
     suffix = ''
-    update_html_freq = 1000
+    update_html_freq = 10_000
     use_wandb = False
     verbose = False
     wandb_project_name = 'CycleGAN-and-pix2pix'
