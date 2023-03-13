@@ -12,6 +12,7 @@ You need to implement the following functions:
     -- <__len__>: Return the number of images.
 """
 import os
+import random
 from typing import Literal
 
 import numpy as np
@@ -109,7 +110,7 @@ class Unaligned3dDataset(BaseDataset):
         for image in getattr(self, side + '_images'):
             sample_shape.append(np.floor(np.array(image.shape) / np.array(self.opt.sample_size)))
             samples_per_image.append(sample_shape[-1].prod())
-        setattr(self, 'samples_per_image_' + side, np.cumsum(samples_per_image))
+        setattr(self, 'samples_per_image_' + side, np.cumsum(samples_per_image, dtype=int))
 
     def init_samples_with_mask(self, side: Literal['A'] | Literal['B']):
         setattr(self, 'sample_shape_' + side, [])
@@ -136,7 +137,7 @@ class Unaligned3dDataset(BaseDataset):
             samples_to_skip[max_sample_count - skips] = skips
 
         unusable_samples = 0 if len(samples_to_skip) == 0 else samples_to_skip.peekitem()[1]
-        setattr(self, 'samples_per_image_' + side, np.array([sample_shape[-1].prod() - unusable_samples]))
+        setattr(self, 'samples_per_image_' + side, np.array([sample_shape[-1].prod() - unusable_samples], dtype=int))
 
     def get_nth_sample(self, shape, n):
         z = int(n / (shape[1] * shape[2]))
@@ -188,11 +189,21 @@ class Unaligned3dDataset(BaseDataset):
         assert index < self.len
         indexA = index % self.samples_per_image_A[-1]
         indexB = index % self.samples_per_image_B[-1]
+
         A_image_index = np.argmax(self.samples_per_image_A > indexA)
         B_image_index = np.argmax(self.samples_per_image_B > indexB)
+        if self.opt.serial_batches:
+            B_image_index = np.argmax(self.samples_per_image_B > indexB)
+        else:
+            B_image_index = random.randint(0, len(self.samples_per_image_B) - 1)
 
         A_index_in_image = indexA - (self.samples_per_image_A[A_image_index-1] if A_image_index > 0 else 0) + self.samples_to_skip('A', indexA)
-        B_index_in_image = indexB - (self.samples_per_image_B[B_image_index-1] if B_image_index > 0 else 0) + self.samples_to_skip('B', indexB)
+        if self.opt.serial_batches:
+            B_index_in_image = indexB - (self.samples_per_image_B[B_image_index-1] if B_image_index > 0 else 0) + self.samples_to_skip('B', indexB)
+        else:
+            B_index_in_image = random.randint(0, self.samples_per_image_B[B_image_index] - \
+                (self.samples_per_image_B[B_image_index - 1] if B_image_index > 0 else 0) - 1)
+
         A_shape = self.sample_shape_A[A_image_index]
         B_shape = self.sample_shape_B[B_image_index]
 

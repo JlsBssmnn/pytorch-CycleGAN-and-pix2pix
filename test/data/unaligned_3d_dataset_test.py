@@ -8,14 +8,17 @@ from data.unaligned_3d_dataset import Unaligned3dDataset
 
 from test.test_utils import tmp_dir, clear_tmp
 
-def create_train_data():
+def create_train_data(data=None):
   os.mkdir(os.path.join(tmp_dir, 'trainA'))
   os.mkdir(os.path.join(tmp_dir, 'trainB'))
+  if data is None:
+    data = np.arange(4000).reshape((10, 20, 20))
+
   with h5py.File(os.path.join(tmp_dir, 'trainA', 'test.h5'), 'w') as f:
-    f.create_dataset('dataset1', data=np.arange(4000).reshape((10, 20, 20)))
+    f.create_dataset('dataset1', data=data)
 
   with h5py.File(os.path.join(tmp_dir, 'trainB', 'test.h5'), 'w') as f:
-    f.create_dataset('dataset1', data=np.arange(4000).reshape((10, 20, 20)))
+    f.create_dataset('dataset1', data=data)
 
 class TestOptions:
   border_offset = [0, 0, 0]
@@ -33,6 +36,7 @@ class TestOptions:
   datasetA_mask = None
   datasetB_mask = None
   dataset_length = 'max'
+  serial_batches = True
 
   def __init__(self, sample_size=None):
     if sample_size is not None:
@@ -196,7 +200,9 @@ class Unaligned3dDatasetTest(unittest.TestCase):
     self.assertEqual(dataset[209]['B'][0, 0, 0], 5116)
 
   def test_normalization(self):
-    create_train_data()
+    data = np.arange(4000).reshape((10, 20, 20))
+    data %= 256
+    create_train_data(data.astype(np.uint8))
     opt = TestOptions([2, 3, 4])
     opt.no_normalization = False
     dataset = Unaligned3dDataset(opt)
@@ -207,6 +213,17 @@ class Unaligned3dDatasetTest(unittest.TestCase):
       self.assertGreaterEqual(A.min(), -1)
       self.assertLessEqual(B.max(), 1)
       self.assertGreaterEqual(B.min(), -1)
+
+  def test_no_serial_batches(self):
+    create_train_data(np.arange(64).reshape(4, 4, 4))
+    opt = TestOptions([2, 2, 2])
+    opt.serial_batches = False
+    dataset = Unaligned3dDataset(opt)
+    seen_samples = set()
+
+    for _ in range(200):
+      seen_samples.add(tuple(dataset[0]['B'].numpy().flatten()))
+    self.assertEqual(len(seen_samples), 8)
     
   def setUp(self) -> None:
     clear_tmp()
