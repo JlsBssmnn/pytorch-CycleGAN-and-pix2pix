@@ -16,6 +16,29 @@ class Identity(nn.Module):
         return x
 
 
+class MapBinary():
+    def __init__(self, _min, _max):
+        assert _max > _min
+
+        self.min = _min
+        self.max = _max
+        self.threshold = _min + (_max - _min) / 2
+
+    def __call__(self, x):
+        x = x.clone()
+        x[x >= self.threshold] = self.max
+        x[x < self.threshold] = self.min 
+        return x
+
+
+def get_post_transform(transform_type=None, *args):
+    if transform_type is None or transform_type == 'identity':
+        return Identity()
+    elif transform_type == 'map_binary':
+        return MapBinary(*args)
+    else:
+        raise NotImplementedError('Post transform [%s] is not found' % transform_type)
+
 def get_norm_layer(norm_type='instance'):
     """Return a normalization layer
 

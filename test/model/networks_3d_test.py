@@ -3,8 +3,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from models.networks_3d import ResnetGenerator
-from models.networks import ResnetGenerator as ResnetGenerator2d
+from models.networks_3d import ResnetGenerator, get_post_transform
 
 class Resnet9Blocks3dTest(unittest.TestCase):
 
@@ -31,3 +30,34 @@ class Resnet9Blocks3dTest(unittest.TestCase):
     image = torch.arange(torch.tensor(expected_shape).prod(), dtype=torch.float).reshape(expected_shape)
     out = net(image)
     self.assertEqual(out.shape, expected_shape)
+
+
+class PostTransformTest(unittest.TestCase):
+  def test_identity(self):
+    transform = get_post_transform('identity')
+
+    t = torch.tensor([-0.2, 0.5, 2, 8.41, -13.20])
+    transformed_t = transform(t)
+    self.assertTrue((t == transformed_t).all())
+
+    t = torch.rand(100)
+    transformed_t = transform(t)
+    self.assertTrue((t == transformed_t).all())
+
+  def test_map_binary(self):
+    transform = get_post_transform('map_binary', -14, 14)
+
+    t = torch.tensor([-0.2, 0.5, 2, 8.41, -13.20])
+    transformed_t = transform(t)
+    self.assertTrue((transformed_t == torch.tensor([-14, 14, 14, 14, -14])).all())
+    self.assertFalse((transformed_t == t).all())
+
+    t = torch.rand(100)
+    transformed_t = transform(t)
+    self.assertTrue((transformed_t == torch.sign(t) * 14).all())
+
+    transform = get_post_transform('map_binary', 4, 10)
+
+    t = torch.tensor([4, 6, 5.3, 8.3, 10, 8.9, 7, 6.99])
+    transformed_t = transform(t)
+    self.assertTrue((transformed_t == torch.tensor([4, 4, 4, 10, 10, 10, 10, 4])).all())

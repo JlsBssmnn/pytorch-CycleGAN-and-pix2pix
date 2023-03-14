@@ -37,10 +37,11 @@ class CycleGAN3dModel(BaseModel):
         parser.set_defaults(dataset_mode='epithelial')
         parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
         if is_train:
-            parser.add_argument('--lambda_regression', type=float, default=1.0, help='weight for the regression loss')  # You can define new arguments for this model.
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
+            parser.add_argument('--post_transform_A', type=str, default=None, help='transformation that is applied to a generated image from Gen_A (fake_B) before it is given to the discriminator')
+            parser.add_argument('--post_transform_B', type=str, default=None, help='transformation that is applied to a generated image from Gen_B (fake_A) before it is given to the discriminator')
 
         return parser
 
@@ -84,6 +85,8 @@ class CycleGAN3dModel(BaseModel):
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
             self.netD_B = networks_3d.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+            self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A, -1, 1)
+            self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B, -1, 1)
 
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
@@ -118,7 +121,7 @@ class CycleGAN3dModel(BaseModel):
         self.fake_A = self.netG_B(self.real_B)  # G_B(B)
         self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
 
-    def backward_D_basic(self, netD, real, fake):
+    def backward_D_basic(self, netD, real, fake, post_transform):
         """Calculate GAN loss for the discriminator
 
         Parameters:
@@ -133,7 +136,7 @@ class CycleGAN3dModel(BaseModel):
         pred_real = netD(real)
         loss_D_real = self.criterionGAN(pred_real, True)
         # Fake
-        pred_fake = netD(fake.detach())
+        pred_fake = netD(post_transform(fake.detach()))
         loss_D_fake = self.criterionGAN(pred_fake, False)
         # Combined loss and calculate gradients
         loss_D = (loss_D_real + loss_D_fake) * 0.5
@@ -143,12 +146,12 @@ class CycleGAN3dModel(BaseModel):
     def backward_D_A(self):
         """Calculate GAN loss for discriminator D_A"""
         fake_B = self.fake_B_pool.query(self.fake_B)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B, self.post_transform_A)
 
     def backward_D_B(self):
         """Calculate GAN loss for discriminator D_B"""
         fake_A = self.fake_A_pool.query(self.fake_A)
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
+        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A, self.post_transform_B)
 
     def backward_G(self):
         """Calculate the loss for generators G_A and G_B"""
@@ -168,9 +171,9 @@ class CycleGAN3dModel(BaseModel):
             self.loss_idt_B = 0
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.post_transform_A(self.fake_B)), True)
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.post_transform_B(self.fake_A)), True)
         # Forward cycle loss || G_B(G_A(A)) - A||
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||
