@@ -237,7 +237,10 @@ class Visualizer():
                     image += 1
                     image *= 127.5
                     image = image.astype(np.uint8)
-                    g.create_dataset(label, data=image)
+                    d = g.create_dataset(label, data=image)
+
+                    if self.opt.element_size_um is not None:
+                        d.attrs['element_size_um'] = self.opt.element_size_um
 
     def plot_current_losses(self, epoch, counter_ratio, losses):
         """display the current losses on visdom display: dictionary of error labels and values
