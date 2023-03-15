@@ -24,22 +24,12 @@ import importlib
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
+from util.get_options import get_training_options
 from util.visualizer import Visualizer
 from util.logging_config import logging
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Missing arguments, see --help or use `config <path-to-config>` to use a config file')
-        exit(1)
-    logging.info('Start of training script')
-    if sys.argv[1] == 'config':
-        if len(sys.argv) < 3:
-            print('The path to the config file is missing')
-            exit(1)
-        opt = importlib.import_module('config.' + sys.argv[2]).config
-        logging.info('Using config %s', sys.argv[2])
-    else:
-        opt = TrainOptions().parse()   # get training options
+    opt = get_training_options()
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     logging.info('The number of training images = %d' % dataset_size)
