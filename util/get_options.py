@@ -1,6 +1,7 @@
 import sys
 import importlib
 from options.train_options import TrainOptions
+from util.logging_config import logging
 
 def get_training_options():
     """
@@ -14,6 +15,7 @@ def get_training_options():
         if len(sys.argv) < 3:
             print('The path to the config file is missing')
             exit(1)
+        logging.info('Loaded configuration %s', sys.argv[2])
         return importlib.import_module('config.' + sys.argv[2]).config
     else:
         return TrainOptions().parse()   # get training options
