@@ -36,6 +36,8 @@ class CycleGAN3dModel(BaseModel):
         """
         parser.set_defaults(dataset_mode='epithelial')
         parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
+        parser.add_argument('--unet_1x2x2_kernel_scale', action='store_true', default=True, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for setting kernel size)')
+        parser.add_argument('--unet_extra_xy_conv', action='store_true', default=True, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for adding an extra conv layer)')
         if is_train:
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
@@ -76,9 +78,13 @@ class CycleGAN3dModel(BaseModel):
         # The naming is different from those used in the paper.
         # Code (vs. paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
         self.netG_A = networks_3d.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
-                                        not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+                                        not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
+                                        unet_1x2x2_kernel_scale=opt.unet_1x2x2_kernel_scale,
+                                        unet_extra_xy_conv=opt.unet_extra_xy_conv)
         self.netG_B = networks_3d.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
-                                        not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+                                        not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
+                                        unet_1x2x2_kernel_scale=opt.unet_1x2x2_kernel_scale,
+                                        unet_extra_xy_conv=opt.unet_extra_xy_conv)
 
         if self.isTrain:  # define discriminators
             self.netD_A = networks_3d.define_D(opt.output_nc, opt.ndf, opt.netD,

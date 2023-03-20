@@ -109,3 +109,52 @@ class UnetGenerator3dTest(unittest.TestCase):
     self.assertEqual(net_output.dtype, torch.float32)
     self.assertLessEqual(net_output.max(), 1)
     self.assertGreaterEqual(net_output.min(), -1)
+
+  def test_UnetSkipConnectionBlock_1x2x2(self):
+    norm_layer = functools.partial(nn.InstanceNorm3d, affine=False, track_running_stats=False)
+    net = UnetGenerator(1, 1, 6, norm_layer=norm_layer, use_dropout=True, unet_1x2x2_kernel_scale=True, unet_extra_xy_conv=True)
+
+    net_input = torch.rand((1, 32, 64, 64))
+    net_output = net(net_input)
+    self.assertEqual(net_output.shape, (1, 32, 64, 64))
+    self.assertEqual(net_output.dtype, torch.float32)
+    self.assertLessEqual(net_output.max(), 1)
+    self.assertGreaterEqual(net_output.min(), -1)
+
+    inner_shape = None
+    next_shape = None
+    def save_inner_shape(_, __, output):
+      nonlocal inner_shape
+      inner_shape = output.shape
+    def save_next_shape(_, __, output):
+      nonlocal next_shape
+      next_shape = output.shape
+
+    net.model.model[1].model[3].model[3].model[3].model[3].model[1].register_forward_hook(save_inner_shape)
+    net.model.model[1].model[3].model[3].model[3].model[3].model[3].register_forward_hook(save_next_shape)
+
+    net(net_input)
+    self.assertEqual(inner_shape, (1, 512, 1, 1, 1))
+    self.assertEqual(next_shape, (1, 512, 1, 2, 2))
+  
+  def test_default_UnetSkipConnectionBlock(self):
+    norm_layer = functools.partial(nn.InstanceNorm3d, affine=False, track_running_stats=False)
+    net = UnetGenerator(1, 1, 5, norm_layer=norm_layer, use_dropout=True)
+
+    net_input = torch.rand((1, 32, 64, 64))
+
+    inner_shape = None
+    next_shape = None
+    def save_inner_shape(_, __, output):
+      nonlocal inner_shape
+      inner_shape = output.shape
+    def save_next_shape(_, __, output):
+      nonlocal next_shape
+      next_shape = output.shape
+
+    net.model.model[1].model[3].model[3].model[3].model[1].register_forward_hook(save_inner_shape)
+    net.model.model[1].model[3].model[3].model[3].model[3].register_forward_hook(save_next_shape)
+
+    net(net_input)
+    self.assertEqual(inner_shape, (1, 512, 1, 2, 2))
+    self.assertEqual(next_shape, (1, 512, 2, 4, 4))

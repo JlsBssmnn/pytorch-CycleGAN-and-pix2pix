@@ -141,7 +141,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], **kwargs):
     """Create a generator
 
     Parameters:
@@ -154,6 +154,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         init_type (str)    -- the name of our initialization method.
         init_gain (float)  -- scaling factor for normal, xavier and orthogonal.
         gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
+        kwargs -- extra parameters that are used for specific generators
 
     Returns a generator
 
@@ -183,6 +184,9 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    elif netG == 'unet_32x64x64':
+        n_layers = 6 if 'unet_extra_xy_conv' in kwargs and kwargs['unet_extra_xy_conv'] else 5
+        net = UnetGenerator(input_nc, output_nc, n_layers, ngf, norm_layer=norm_layer, use_dropout=use_dropout, **kwargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -465,7 +469,7 @@ class ResnetBlock(nn.Module):
 class UnetGenerator(nn.Module):
     """Create a Unet-based generator"""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm3d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm3d, use_dropout=False, **kwargs):
         """Construct a Unet generator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -480,14 +484,14 @@ class UnetGenerator(nn.Module):
         """
         super(UnetGenerator, self).__init__()
         # construct unet structure
-        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)  # add the innermost layer
+        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True, **kwargs)  # add the innermost layer
         for i in range(num_downs - 5):          # add intermediate layers with ngf * 8 filters
-            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
+            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout, **kwargs)
         # gradually reduce the number of filters from ngf * 8 to ngf
-        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, **kwargs)
+        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer, **kwargs)
+        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer, **kwargs)
+        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer, **kwargs)  # add the outermost layer
 
     def forward(self, input):
         """Standard forward"""
@@ -510,8 +514,9 @@ class UnetSkipConnectionBlock(nn.Module):
         |-- downsampling -- |submodule| -- upsampling --|
     """
 
-    def __init__(self, outer_nc, inner_nc, input_nc=None,
-                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm3d, use_dropout=False):
+    def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False,
+        innermost=False, norm_layer=nn.BatchNorm3d, use_dropout=False, unet_1x2x2_kernel_scale=False,
+        unet_extra_xy_conv=False):
         """Construct a Unet submodule with skip connections.
 
         Parameters:
@@ -523,6 +528,8 @@ class UnetSkipConnectionBlock(nn.Module):
             innermost (bool)    -- if this module is the innermost module
             norm_layer          -- normalization layer
             use_dropout (bool)  -- if use dropout layers.
+            unet_1x2x2_kernel_scale (bool) -- if true, use a (2, 4, 4) kernel (good for images that are larger in x-and y dimension)
+            unet_extra_xy_conv (bool) -- if true, innermost layer reduces only size of x-and y dimension
         """
         super(UnetSkipConnectionBlock, self).__init__()
         self.outermost = outermost
@@ -532,8 +539,20 @@ class UnetSkipConnectionBlock(nn.Module):
             use_bias = norm_layer == nn.InstanceNorm3d
         if input_nc is None:
             input_nc = outer_nc
-        downconv = nn.Conv3d(input_nc, inner_nc, kernel_size=4,
-                             stride=2, padding=1, bias=use_bias)
+
+        if unet_1x2x2_kernel_scale:
+            kernel_size = (2, 4, 4)
+            padding = (0, 1, 1)
+        else:
+            kernel_size = 4
+            padding = 1
+
+        if innermost and unet_extra_xy_conv:
+            downconv = nn.Conv3d(input_nc, inner_nc, kernel_size=(1, 4, 4),
+                                stride=(1, 2, 2), padding=(0, 1, 1), bias=use_bias)
+        else:
+            downconv = nn.Conv3d(input_nc, inner_nc, kernel_size=kernel_size,
+                                stride=2, padding=padding, bias=use_bias)
         downrelu = nn.LeakyReLU(0.2, True)
         downnorm = norm_layer(inner_nc)
         uprelu = nn.ReLU(True)
@@ -541,22 +560,27 @@ class UnetSkipConnectionBlock(nn.Module):
 
         if outermost:
             upconv = nn.ConvTranspose3d(inner_nc * 2, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1)
+                                        kernel_size=kernel_size, stride=2,
+                                        padding=padding)
             down = [downconv]
             up = [uprelu, upconv, nn.Tanh()]
             model = down + [submodule] + up
         elif innermost:
-            upconv = nn.ConvTranspose3d(inner_nc, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1, bias=use_bias)
+            if unet_extra_xy_conv:
+                upconv = nn.ConvTranspose3d(inner_nc, outer_nc,
+                                            kernel_size=(1, 4, 4), stride=(1, 2, 2),
+                                            padding=(0, 1, 1), bias=use_bias)
+            else:
+                upconv = nn.ConvTranspose3d(inner_nc, outer_nc,
+                                            kernel_size=kernel_size, stride=2,
+                                            padding=padding, bias=use_bias)
             down = [downrelu, downconv]
             up = [uprelu, upconv, upnorm]
             model = down + up
         else:
             upconv = nn.ConvTranspose3d(inner_nc * 2, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1, bias=use_bias)
+                                        kernel_size=kernel_size, stride=2,
+                                        padding=padding, bias=use_bias)
             down = [downrelu, downconv, downnorm]
             up = [uprelu, upconv, upnorm]
 
