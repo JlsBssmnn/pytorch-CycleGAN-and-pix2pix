@@ -192,7 +192,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
-def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[], **kwargs):
     """Create a discriminator
 
     Parameters:
@@ -209,7 +209,7 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
 
     Our current implementation provides three types of discriminators:
         [basic]: 'PatchGAN' classifier described in the original pix2pix paper.
-        It can classify whether 70×70 overlapping patches are real or fake.
+        It can classify whether 70x70 overlapping patches are real or fake.
         Such a patch-level discriminator architecture has fewer parameters
         than a full-image discriminator and can work on arbitrarily-sized images
         in a fully convolutional fashion.
@@ -228,7 +228,7 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
     if netD == 'basic':  # default PatchGAN classifier
         net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer)
     elif netD == 'n_layers':  # more options
-        net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer)
+        net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer, **kwargs)
     elif netD == 'pixel':     # classify if each pixel is real or fake
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
     else:
@@ -601,7 +601,8 @@ class UnetSkipConnectionBlock(nn.Module):
 class NLayerDiscriminator(nn.Module):
     """Defines a PatchGAN discriminator"""
 
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm3d):
+    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm3d, disc_1x2x2_kernel_scale=False,
+        disc_extra_xy_conv=False, disc_no_decrease_last_layers=False):
         """Construct a PatchGAN discriminator
 
         Parameters:
@@ -609,6 +610,9 @@ class NLayerDiscriminator(nn.Module):
             ndf (int)       -- the number of filters in the last conv layer
             n_layers (int)  -- the number of conv layers in the discriminator
             norm_layer      -- normalization layer
+            disc_1x2x2_kernel_scale -- sets the kernel size to (2, 4, 4) and padding to (0, 1, 1)
+            disc_extra_xy_conv -- the last reducing conv layer will only reduce the size along the x-and y-dimensions
+            disc_no_decrease_last_layers -- the last 2 conv layers will not change the size of the output
         """
         super(NLayerDiscriminator, self).__init__()
         if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm3d has affine parameters
@@ -616,29 +620,62 @@ class NLayerDiscriminator(nn.Module):
         else:
             use_bias = norm_layer == nn.InstanceNorm3d
 
-        kw = 4
-        padw = 1
+        class CheckedNormalization(nn.Module):
+            def __init__(self, num_features):
+                super(CheckedNormalization, self).__init__()
+                self.actual_norm_layer = norm_layer(num_features)
+
+            def forward(self, tensor):
+                if tensor.shape[-3:] == (1, 1, 1):
+                    return tensor
+                else:
+                    return self.actual_norm_layer(tensor)
+
+        if disc_1x2x2_kernel_scale:
+            kw = (2, 4, 4)
+            padw = (0, 1, 1)
+        else:
+            kw = 4
+            padw = 1
         sequence = [nn.Conv3d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
         nf_mult = 1
         nf_mult_prev = 1
         for n in range(1, n_layers):  # gradually increase the number of filters
             nf_mult_prev = nf_mult
             nf_mult = min(2 ** n, 8)
-            sequence += [
-                nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
-                norm_layer(ndf * nf_mult),
-                nn.LeakyReLU(0.2, True)
-            ]
+
+            if n == n_layers - 1 and disc_extra_xy_conv:
+                sequence += [
+                    nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=(1, 4, 4), stride=(1, 2, 2), padding=(0, 1, 1), bias=use_bias),
+                    CheckedNormalization(ndf * nf_mult),
+                    nn.LeakyReLU(0.2, True)
+                ]
+            else:
+                sequence += [
+                    nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
+                    CheckedNormalization(ndf * nf_mult),
+                    nn.LeakyReLU(0.2, True)
+                ]
 
         nf_mult_prev = nf_mult
         nf_mult = min(2 ** n_layers, 8)
-        sequence += [
-            nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
-            norm_layer(ndf * nf_mult),
-            nn.LeakyReLU(0.2, True)
-        ]
 
-        sequence += [nn.Conv3d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
+        if disc_no_decrease_last_layers:
+            sequence += [
+                nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=3, stride=1, padding=1, bias=use_bias),
+                CheckedNormalization(ndf * nf_mult),
+                nn.LeakyReLU(0.2, True)
+            ]
+
+            sequence += [nn.Conv3d(ndf * nf_mult, 1, kernel_size=3, stride=1, padding=1)]  # output 1 channel prediction map
+        else:
+            sequence += [
+                nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
+                CheckedNormalization(ndf * nf_mult),
+                nn.LeakyReLU(0.2, True)
+            ]
+
+            sequence += [nn.Conv3d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
         self.model = nn.Sequential(*sequence)
 
     def forward(self, input):

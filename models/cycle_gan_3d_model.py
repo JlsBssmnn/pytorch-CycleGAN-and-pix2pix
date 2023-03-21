@@ -36,14 +36,18 @@ class CycleGAN3dModel(BaseModel):
         """
         parser.set_defaults(dataset_mode='epithelial')
         parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
-        parser.add_argument('--unet_1x2x2_kernel_scale', action='store_true', default=True, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for setting kernel size)')
-        parser.add_argument('--unet_extra_xy_conv', action='store_true', default=True, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for adding an extra conv layer)')
+        parser.add_argument('--unet_1x2x2_kernel_scale', action='store_true', default=False, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for setting kernel size)')
+        parser.add_argument('--unet_extra_xy_conv', action='store_true', default=False, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for adding an extra conv layer)')
         if is_train:
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
             parser.add_argument('--post_transform_A', type=str, default=None, help='transformation that is applied to a generated image from Gen_A (fake_B) before it is given to the discriminator')
             parser.add_argument('--post_transform_B', type=str, default=None, help='transformation that is applied to a generated image from Gen_B (fake_A) before it is given to the discriminator')
+
+            parser.add_argument('--disc_1x2x2_kernel_scale', action='store_true', default=False, help='Passed to NLayerDiscriminator')
+            parser.add_argument('--disc_extra_xy_conv', action='store_true', default=False, help='Passed to NLayerDiscriminator')
+            parser.add_argument('--disc_no_decrease_last_layers', action='store_true', default=False, help='Passed to NLayerDiscriminator')
 
         return parser
 
@@ -88,9 +92,15 @@ class CycleGAN3dModel(BaseModel):
 
         if self.isTrain:  # define discriminators
             self.netD_A = networks_3d.define_D(opt.output_nc, opt.ndf, opt.netD,
-                                            opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+                                            opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
+                                            disc_1x2x2_kernel_scale = opt.disc_1x2x2_kernel_scale,
+                                            disc_extra_xy_conv = opt.disc_extra_xy_conv,
+                                            disc_no_decrease_last_layers = opt.disc_no_decrease_last_layers)
             self.netD_B = networks_3d.define_D(opt.input_nc, opt.ndf, opt.netD,
-                                            opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+                                            opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
+                                            disc_1x2x2_kernel_scale = opt.disc_1x2x2_kernel_scale,
+                                            disc_extra_xy_conv = opt.disc_extra_xy_conv,
+                                            disc_no_decrease_last_layers = opt.disc_no_decrease_last_layers)
             self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A, -1, 1)
             self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B, -1, 1)
 

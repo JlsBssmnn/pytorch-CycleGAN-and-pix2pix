@@ -3,7 +3,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from models.networks_3d import ResnetGenerator, get_post_transform, UnetGenerator
+from models.networks_3d import ResnetGenerator, get_post_transform, UnetGenerator, NLayerDiscriminator
 
 class Resnet9Blocks3dTest(unittest.TestCase):
 
@@ -158,3 +158,30 @@ class UnetGenerator3dTest(unittest.TestCase):
     net(net_input)
     self.assertEqual(inner_shape, (1, 512, 1, 2, 2))
     self.assertEqual(next_shape, (1, 512, 2, 4, 4))
+
+
+class NLayerDiscriminatorTest(unittest.TestCase):
+  def test_original_discriminator(self):
+    norm_layer = functools.partial(nn.InstanceNorm3d, affine=False, track_running_stats=False)
+    disc = NLayerDiscriminator(1, norm_layer=norm_layer)
+
+    self.assertEqual(disc(torch.rand((1, 32, 64, 64))).shape, (1, 2, 6, 6))
+    self.assertEqual(disc(torch.rand((1, 128, 128, 128))).shape, (1, 14, 14, 14))
+
+  def test_condense_to_1_voxel(self):
+    norm_layer = functools.partial(nn.InstanceNorm3d, affine=False, track_running_stats=False)
+    disc = NLayerDiscriminator(1, n_layers=6, norm_layer=norm_layer, disc_1x2x2_kernel_scale=True,
+        disc_extra_xy_conv=True, disc_no_decrease_last_layers=True)
+    self.assertEqual(disc(torch.rand((1, 32, 64, 64))).shape, (1, 1, 1, 1))
+
+    disc = NLayerDiscriminator(1, n_layers=5, norm_layer=norm_layer, disc_1x2x2_kernel_scale=True,
+        disc_extra_xy_conv=True, disc_no_decrease_last_layers=True)
+    self.assertEqual(disc(torch.rand((1, 16, 32, 32))).shape, (1, 1, 1, 1))
+
+    disc = NLayerDiscriminator(1, n_layers=6, norm_layer=norm_layer, disc_1x2x2_kernel_scale=False,
+        disc_extra_xy_conv=True, disc_no_decrease_last_layers=True)
+    self.assertEqual(disc(torch.rand((1, 32, 64, 64))).shape, (1, 1, 1, 1))
+
+    disc = NLayerDiscriminator(1, n_layers=5, norm_layer=norm_layer, disc_1x2x2_kernel_scale=False,
+        disc_extra_xy_conv=False, disc_no_decrease_last_layers=True)
+    self.assertEqual(disc(torch.rand((1, 32, 32, 32))).shape, (1, 1, 1, 1))
