@@ -64,14 +64,17 @@ class Unaligned3dDataset(BaseDataset):
         BaseDataset.__init__(self, opt)
         self.A_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'A', opt.datasetA_file), opt.datasetA_names, [opt.datasetA_mask])
         self.B_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'B', opt.datasetB_file), opt.datasetB_names, [opt.datasetB_mask])
+        assert all([x.ndim == 4 for x in self.A_images]) and all([x.ndim == 4 for x in self.B_images]), \
+            'Images must be 4D (3 dimensions + color channels)'
 
         offset_slicing = tuple([slice(offset, -offset if offset > 0 else None) for offset in opt.border_offset])
-        self.A_images = [arr[offset_slicing] for arr in self.A_images]
-        self.B_images = [arr[offset_slicing] for arr in self.B_images]
+        self.A_images = [arr[(slice(None),) + offset_slicing] for arr in self.A_images]
+        self.B_images = [arr[(slice(None),) + offset_slicing] for arr in self.B_images]
 
         if opt.datasetA_mask:
             assert len(self.A_images) == 1
             self.A_mask = get_datasets(os.path.join(opt.dataroot, opt.phase + 'A', opt.datasetA_file), [opt.datasetA_mask])[0][offset_slicing]
+            assert self.A_mask.ndim == 3, 'A mask must be 3D'
             self.init_samples_with_mask('A')
         else:
             self.init_samples_no_mask('A')
@@ -80,6 +83,7 @@ class Unaligned3dDataset(BaseDataset):
         if opt.datasetB_mask:
             assert len(self.B_images) == 1
             self.B_mask = get_datasets(os.path.join(opt.dataroot, opt.phase + 'B', opt.datasetB_file), [opt.datasetB_mask])[0][offset_slicing]
+            assert self.B_mask.ndim == 3, 'A mask must be 3D'
             self.init_samples_with_mask('B')
         else:
             self.init_samples_no_mask('B')
@@ -108,7 +112,7 @@ class Unaligned3dDataset(BaseDataset):
         sample_shape = getattr(self, 'sample_shape_' + side)
 
         for image in getattr(self, side + '_images'):
-            sample_shape.append(np.floor(np.array(image.shape) / np.array(self.opt.sample_size)))
+            sample_shape.append(np.floor(np.array(image.shape[1:]) / np.array(self.opt.sample_size)))
             samples_per_image.append(sample_shape[-1].prod())
         setattr(self, 'samples_per_image_' + side, np.cumsum(samples_per_image, dtype=int))
 
@@ -121,7 +125,7 @@ class Unaligned3dDataset(BaseDataset):
         image = getattr(self, side + '_images')[0]
         mask = getattr(self, side + '_mask')
 
-        sample_shape.append(np.floor(np.array(image.shape) / np.array(self.opt.sample_size)))
+        sample_shape.append(np.floor(np.array(image.shape[1:]) / np.array(self.opt.sample_size)))
         max_sample_count = int(sample_shape[0].prod())
         skips = 0
         for i in range(max_sample_count):
@@ -191,7 +195,6 @@ class Unaligned3dDataset(BaseDataset):
         indexB = index % self.samples_per_image_B[-1]
 
         A_image_index = np.argmax(self.samples_per_image_A > indexA)
-        B_image_index = np.argmax(self.samples_per_image_B > indexB)
         if self.opt.serial_batches:
             B_image_index = np.argmax(self.samples_per_image_B > indexB)
         else:
@@ -207,8 +210,8 @@ class Unaligned3dDataset(BaseDataset):
         A_shape = self.sample_shape_A[A_image_index]
         B_shape = self.sample_shape_B[B_image_index]
 
-        A_img = self.A_images[A_image_index][self.get_nth_sample(A_shape, A_index_in_image)]
-        B_img = self.B_images[B_image_index][self.get_nth_sample(B_shape, B_index_in_image)]
+        A_img = self.A_images[A_image_index][(slice(None),) + self.get_nth_sample(A_shape, A_index_in_image)]
+        B_img = self.B_images[B_image_index][(slice(None),) + self.get_nth_sample(B_shape, B_index_in_image)]
         A = self.transform_A(A_img)
         B = self.transform_B(B_img)
 

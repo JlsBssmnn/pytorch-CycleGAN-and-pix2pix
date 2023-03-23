@@ -495,17 +495,7 @@ class UnetGenerator(nn.Module):
 
     def forward(self, input):
         """Standard forward"""
-        shape = input.shape
-        reshaped = False
-        if len(shape) == 4:
-            reshaped = True
-            input = input.reshape(1, *shape)
-
-        output = self.model(input)
-        if reshaped:
-            return output.reshape(*shape)
-        else:
-            return output
+        return self.model(input)
 
 
 class UnetSkipConnectionBlock(nn.Module):

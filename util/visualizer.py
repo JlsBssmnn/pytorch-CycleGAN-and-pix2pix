@@ -232,7 +232,7 @@ class Visualizer():
 
                 for label, image in visuals.items():
                     image = image.cpu().detach().numpy()
-                    if image.shape[0] == 1:
+                    if image.ndim == 5:
                         image = image[0]
                     image += 1
                     image *= 127.5
