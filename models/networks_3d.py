@@ -187,6 +187,9 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'unet_32x64x64':
         n_layers = 6 if 'unet_extra_xy_conv' in kwargs and kwargs['unet_extra_xy_conv'] else 5
         net = UnetGenerator(input_nc, output_nc, n_layers, ngf, norm_layer=norm_layer, use_dropout=use_dropout, **kwargs)
+    elif netG == 'unet_16x32x32':
+        n_layers = 5 if 'unet_extra_xy_conv' in kwargs and kwargs['unet_extra_xy_conv'] else 4
+        net = UnetGenerator(input_nc, output_nc, n_layers, ngf, norm_layer=norm_layer, use_dropout=use_dropout, **kwargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
