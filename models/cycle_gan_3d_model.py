@@ -18,6 +18,7 @@ You need to implement the following functions:
 import torch
 import itertools
 from util.image_pool import ImagePool
+from util.my_utils import object_to_dict
 from .base_model import BaseModel
 from . import networks_3d
 
@@ -83,26 +84,20 @@ class CycleGAN3dModel(BaseModel):
         # Code (vs. paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
         self.netG_A = networks_3d.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
-                                        unet_1x2x2_kernel_scale=opt.unet_1x2x2_kernel_scale,
-                                        unet_extra_xy_conv=opt.unet_extra_xy_conv)
+                                        **object_to_dict(opt.generator_config))
         self.netG_B = networks_3d.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
-                                        unet_1x2x2_kernel_scale=opt.unet_1x2x2_kernel_scale,
-                                        unet_extra_xy_conv=opt.unet_extra_xy_conv)
+                                        **object_to_dict(opt.generator_config))
 
         if self.isTrain:  # define discriminators
             self.netD_A = networks_3d.define_D(opt.output_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
-                                            disc_1x2x2_kernel_scale = opt.disc_1x2x2_kernel_scale,
-                                            disc_extra_xy_conv = opt.disc_extra_xy_conv,
-                                            disc_no_decrease_last_layers = opt.disc_no_decrease_last_layers)
+                                            **object_to_dict(opt.discriminator_config))
             self.netD_B = networks_3d.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
-                                            disc_1x2x2_kernel_scale = opt.disc_1x2x2_kernel_scale,
-                                            disc_extra_xy_conv = opt.disc_extra_xy_conv,
-                                            disc_no_decrease_last_layers = opt.disc_no_decrease_last_layers)
-            self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A, -1, 1)
-            self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B, -1, 1)
+                                            **object_to_dict(opt.discriminator_config))
+            self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A)
+            self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B)
 
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels

@@ -3,7 +3,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from models.networks_3d import ResnetGenerator, get_post_transform, UnetGenerator, NLayerDiscriminator
+from models.networks_3d import ResnetGenerator, get_post_transform, UnetGenerator, NLayerDiscriminator, Scaler
 
 class Resnet9Blocks3dTest(unittest.TestCase):
 
@@ -185,3 +185,19 @@ class NLayerDiscriminatorTest(unittest.TestCase):
     disc = NLayerDiscriminator(1, n_layers=5, norm_layer=norm_layer, disc_1x2x2_kernel_scale=False,
         disc_extra_xy_conv=False, disc_no_decrease_last_layers=True)
     self.assertEqual(disc(torch.rand((1, 32, 32, 32))).shape, (1, 1, 1, 1))
+
+
+class ScalerTest(unittest.TestCase):
+    def test_scale_tanh(self):
+        scaler = Scaler(-1, 1, 0, 255)
+        image = (torch.rand(200) - 0.5) * 2
+        converted = scaler(image)
+
+        torch.testing.assert_close(converted, (image + 1)* 127.5)
+
+    def test_scale_sigmoid(self):
+        scaler = Scaler(0, 1, 0, 255)
+        image = torch.rand(200)
+        converted = scaler(image)
+
+        torch.testing.assert_close(converted, image * 255)

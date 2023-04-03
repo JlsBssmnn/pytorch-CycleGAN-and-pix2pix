@@ -4,6 +4,7 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 from util.logging_config import logging
+from pytorch_3dunet.pytorch3dunet.unet3d.model import UNet3D, ResidualUNet3D, ResidualUNetSE3D, AbstractUNet
 
 
 ###############################################################################
@@ -31,11 +32,29 @@ class MapBinary():
         return x
 
 
-def get_post_transform(transform_type=None, *args):
+class Scaler():
+    def __init__(self, in_min, in_max, out_min, out_max):
+        assert in_min < in_max and out_min < out_max
+
+        in_diff = abs(in_max - in_min)
+        out_diff = abs(out_max - out_min)
+        self.scaling = out_diff / in_diff
+        self.offset = out_min - in_min * self.scaling
+
+    def __call__(self, x):
+        return x * self.scaling + self.offset
+
+def get_post_transform(transform_type=None):
     if transform_type is None or transform_type == 'identity':
         return Identity()
-    elif transform_type == 'map_binary':
-        return MapBinary(*args)
+    elif transform_type == 'map_binary_tanh':
+        return MapBinary(-1, 1)
+    elif transform_type == 'map_binary_sigmoid':
+        return MapBinary(0, 1)
+    elif transform_type == 'tanh_to_uint8':
+        return Scaler(-1, 1, 0, 255)
+    elif transform_type == 'sigmoid_to_uint8':
+        return Scaler(0, 1, 0, 255)
     else:
         raise NotImplementedError('Post transform [%s] is not found' % transform_type)
 
@@ -190,6 +209,14 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'unet_16x32x32':
         n_layers = 5 if 'unet_extra_xy_conv' in kwargs and kwargs['unet_extra_xy_conv'] else 4
         net = UnetGenerator(input_nc, output_nc, n_layers, ngf, norm_layer=norm_layer, use_dropout=use_dropout, **kwargs)
+    elif netG == 'UNet3D':
+        net = UNet3D(input_nc, output_nc, **kwargs)
+    elif netG == 'ResidualUNet3D':
+        net = ResidualUNet3D(input_nc, output_nc, **kwargs)
+    elif netG == 'ResidualUNetSE3D':
+        netG = ResidualUNetSE3D(input_nc, output_nc, **kwargs)
+    elif netG == 'AbstractUNet':
+        netG = AbstractUNet(input_nc, output_nc, **kwargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
