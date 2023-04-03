@@ -83,8 +83,6 @@ class Visualizer():
         self.wandb_project_name = opt.wandb_project_name
         self.current_epoch = 0
         self.ncols = opt.display_ncols
-        self.post_transform_A = networks_3d.get_post_transform(opt.display_post_transform_A)
-        self.post_transform_B = networks_3d.get_post_transform(opt.display_post_transform_B)
         self.tanh_to_uint8 = networks_3d.get_post_transform('tanh_to_uint8')
 
         if opt.dataset_mode == 'unaligned_3d':
@@ -239,13 +237,7 @@ class Visualizer():
                     image = image.cpu().detach().numpy()
                     if image.ndim == 5:
                         image = image[0]
-                    if label in ['fake_B', 'rec_B', 'idt_A']:
-                        image = self.post_transform_A(image)
-                    elif label in ['fake_A', 'rec_A', 'idt_B']:
-                        image = self.post_transform_B(image)
-                    else:
-                        image = self.tanh_to_uint8(image)
-                    image = image.astype(np.uint8)
+                    image = self.tanh_to_uint8(image).astype(np.uint8)
                     d = g.create_dataset(label, data=image)
 
                     if self.opt.element_size_um is not None:

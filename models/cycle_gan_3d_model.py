@@ -89,6 +89,8 @@ class CycleGAN3dModel(BaseModel):
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
                                         **object_to_dict(opt.generator_config))
 
+        self.generator_output_f = networks_3d.Scaler(opt.generator_output_range[0], opt.generator_output_range[1], -1, 1)
+
         if self.isTrain:  # define discriminators
             self.netD_A = networks_3d.define_D(opt.output_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
@@ -96,8 +98,8 @@ class CycleGAN3dModel(BaseModel):
             self.netD_B = networks_3d.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
                                             **object_to_dict(opt.discriminator_config))
-            self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A)
-            self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B)
+            self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A, opt)
+            self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B, opt)
 
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
@@ -127,10 +129,10 @@ class CycleGAN3dModel(BaseModel):
 
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG_A(self.real_A)  # G_A(A)
-        self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A))
-        self.fake_A = self.netG_B(self.real_B)  # G_B(B)
-        self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
+        self.fake_B = self.generator_output_f(self.netG_A(self.real_A))  # G_A(A)
+        self.rec_A = self.generator_output_f(self.netG_B(self.fake_B))   # G_B(G_A(A))
+        self.fake_A = self.generator_output_f(self.netG_B(self.real_B))  # G_B(B)
+        self.rec_B = self.generator_output_f(self.netG_A(self.fake_A))   # G_A(G_B(B))
 
     def backward_D_basic(self, netD, real, fake, post_transform):
         """Calculate GAN loss for the discriminator
@@ -172,10 +174,10 @@ class CycleGAN3dModel(BaseModel):
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
-            self.idt_A = self.netG_A(self.real_B)
+            self.idt_A = self.generator_output_f(self.netG_A(self.real_B))
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
             # G_B should be identity if real_A is fed: ||G_B(A) - A||
-            self.idt_B = self.netG_B(self.real_A)
+            self.idt_B = self.generator_output_f(self.netG_B(self.real_A))
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
         else:
             self.loss_idt_A = 0
