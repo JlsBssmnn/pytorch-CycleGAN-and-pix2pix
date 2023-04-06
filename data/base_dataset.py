@@ -130,6 +130,8 @@ def get_transform_3d(opt, params=None, grayscale=False, method=transforms.Interp
 def ToTensor(np_array):
     if np_array.dtype == np.uint8:
         return torch.tensor(np_array / 255, dtype=torch.float32)
+    elif np_array.dtype == np.uint16:
+        return torch.tensor(np_array / np_array.max(), dtype=torch.float32)
     else:
         return torch.tensor(np_array, dtype=torch.float32)
 
