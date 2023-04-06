@@ -129,12 +129,12 @@ class CycleGAN3dModel(BaseModel):
 
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.generator_output_f(self.netG_A(self.real_A))  # G_A(A)
+        self.fake_B = self.post_transform_A(self.generator_output_f(self.netG_A(self.real_A)))  # G_A(A)
         self.rec_A = self.generator_output_f(self.netG_B(self.fake_B))   # G_B(G_A(A))
-        self.fake_A = self.generator_output_f(self.netG_B(self.real_B))  # G_B(B)
+        self.fake_A = self.post_transform_B(self.generator_output_f(self.netG_B(self.real_B)))  # G_B(B)
         self.rec_B = self.generator_output_f(self.netG_A(self.fake_A))   # G_A(G_B(B))
 
-    def backward_D_basic(self, netD, real, fake, post_transform):
+    def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator
 
         Parameters:
@@ -149,7 +149,7 @@ class CycleGAN3dModel(BaseModel):
         pred_real = netD(real)
         loss_D_real = self.criterionGAN(pred_real, True)
         # Fake
-        pred_fake = netD(post_transform(fake.detach()))
+        pred_fake = netD(fake.detach())
         loss_D_fake = self.criterionGAN(pred_fake, False)
         # Combined loss and calculate gradients
         loss_D = (loss_D_real + loss_D_fake) * 0.5
@@ -159,12 +159,12 @@ class CycleGAN3dModel(BaseModel):
     def backward_D_A(self):
         """Calculate GAN loss for discriminator D_A"""
         fake_B = self.fake_B_pool.query(self.fake_B)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B, self.post_transform_A)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
 
     def backward_D_B(self):
         """Calculate GAN loss for discriminator D_B"""
         fake_A = self.fake_A_pool.query(self.fake_A)
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A, self.post_transform_B)
+        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
 
     def backward_G(self):
         """Calculate the loss for generators G_A and G_B"""
@@ -184,9 +184,9 @@ class CycleGAN3dModel(BaseModel):
             self.loss_idt_B = 0
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.post_transform_A(self.fake_B)), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.post_transform_B(self.fake_A)), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
         # Forward cycle loss || G_B(G_A(A)) - A||
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||

@@ -49,7 +49,7 @@ def get_post_transform(transform_type=None, opt=None):
         return Identity()
     elif transform_type == 'map_binary':
         assert opt is not None
-        return MapBinary(opt.generator_output_range[0], opt.generator_output_range[1])
+        return MapBinary(-1, 1)
     elif transform_type == 'tanh_to_uint8':
         return Scaler(-1, 1, 0, 255)
     elif transform_type == 'sigmoid_to_uint8':
