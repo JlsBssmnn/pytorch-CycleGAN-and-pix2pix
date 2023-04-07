@@ -45,7 +45,7 @@ class PostTransformTest(unittest.TestCase):
     self.assertTrue((t == transformed_t).all())
 
   def test_map_binary(self):
-    transform = get_post_transform('map_binary', -14, 14)
+    transform = get_post_transform('threshold', -14, 14)
 
     t = torch.tensor([-0.2, 0.5, 2, 8.41, -13.20])
     transformed_t = transform(t)
@@ -56,7 +56,7 @@ class PostTransformTest(unittest.TestCase):
     transformed_t = transform(t)
     self.assertTrue((transformed_t == torch.sign(t) * 14).all())
 
-    transform = get_post_transform('map_binary', 4, 10)
+    transform = get_post_transform('threshold', 4, 10)
 
     t = torch.tensor([4, 6, 5.3, 8.3, 10, 8.9, 7, 6.99])
     transformed_t = transform(t)

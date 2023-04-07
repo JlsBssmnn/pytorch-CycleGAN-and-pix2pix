@@ -98,8 +98,8 @@ class CycleGAN3dModel(BaseModel):
             self.netD_B = networks_3d.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
                                             **object_to_dict(opt.discriminator_config))
-            self.post_transform_A = networks_3d.get_post_transform(opt.post_transform_A, opt)
-            self.post_transform_B = networks_3d.get_post_transform(opt.post_transform_B, opt)
+            self.post_transform_A = networks_3d.get_post_transform(opt.post_transforms_A)
+            self.post_transform_B = networks_3d.get_post_transform(opt.post_transforms_B)
 
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels

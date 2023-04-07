@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import init
+import torchvision
 import functools
 from torch.optim import lr_scheduler
 from util.logging_config import logging
@@ -17,18 +18,22 @@ class Identity(nn.Module):
         return x
 
 
-class MapBinary():
-    def __init__(self, _min, _max):
-        assert _max > _min
+class Threshold():
+    def __init__(self, lower, upper, threshold=None):
+        assert lower < upper
 
-        self.min = _min
-        self.max = _max
-        self.threshold = _min + (_max - _min) / 2
+        self.lower = lower
+        self.upper = upper
+
+        if threshold is None:
+            self.threshold = (lower + upper) / 2
+        else:
+            self.threshold = threshold
 
     def __call__(self, x):
         x = x.clone()
-        x[x >= self.threshold] = self.max
-        x[x < self.threshold] = self.min 
+        x[x >= self.threshold] = self.upper
+        x[x < self.threshold] = self.lower
         return x
 
 
@@ -44,18 +49,25 @@ class Scaler():
     def __call__(self, x):
         return x * self.scaling + self.offset
 
-def get_post_transform(transform_type=None, opt=None):
-    if transform_type is None or transform_type == 'identity':
+def get_post_transform(transform=None, **kwargs):
+    if transform is None or transform == 'identity':
         return Identity()
-    elif transform_type == 'map_binary':
-        assert opt is not None
-        return MapBinary(-1, 1)
-    elif transform_type == 'tanh_to_uint8':
+    elif type(transform) == dict:
+        transform_list = []
+        for transform_name, params in transform.items():
+            f = get_post_transform(transform_name, **params)
+            transform_list.append(f)
+        return torchvision.transforms.Compose(transform_list)
+    elif transform == 'threshold':
+        return Threshold(**kwargs)
+    elif transform == 'scaler':
+        return Scaler(**kwargs)
+    elif transform == 'tanh_to_uint8':
         return Scaler(-1, 1, 0, 255)
-    elif transform_type == 'sigmoid_to_uint8':
+    elif transform == 'sigmoid_to_uint8':
         return Scaler(0, 1, 0, 255)
     else:
-        raise NotImplementedError('Post transform [%s] is not found' % transform_type)
+        raise NotImplementedError('Post transform [%s] is not found' % transform)
 
 def get_norm_layer(norm_type='instance'):
     """Return a normalization layer
