@@ -221,13 +221,13 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         n_layers = 5 if 'unet_extra_xy_conv' in kwargs and kwargs['unet_extra_xy_conv'] else 4
         net = UnetGenerator(input_nc, output_nc, n_layers, ngf, norm_layer=norm_layer, use_dropout=use_dropout, **kwargs)
     elif netG == 'UNet3D':
-        net = UNet3D(input_nc, output_nc, **kwargs)
+        net = UNet3D(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     elif netG == 'ResidualUNet3D':
-        net = ResidualUNet3D(input_nc, output_nc, **kwargs)
+        net = ResidualUNet3D(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     elif netG == 'ResidualUNetSE3D':
-        netG = ResidualUNetSE3D(input_nc, output_nc, **kwargs)
+        netG = ResidualUNetSE3D(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     elif netG == 'AbstractUNet':
-        netG = AbstractUNet(input_nc, output_nc, **kwargs)
+        netG = AbstractUNet(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
