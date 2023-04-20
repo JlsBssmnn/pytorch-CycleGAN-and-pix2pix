@@ -3,6 +3,7 @@ import unittest
 import h5py
 import os
 import numpy as np
+import numpy.testing as npt
 import torch
 from data.unaligned_3d_dataset import Unaligned3dDataset
 
@@ -38,6 +39,9 @@ class TestOptions:
   datasetB_mask = None
   dataset_length = 'max'
   serial_batches = True
+  dataset_stride: None | tuple[int, int, int] = None
+  datasetA_mask: None | str = None
+  datasetB_mask: None | str = None
 
   def __init__(self, sample_size=None):
     if sample_size is not None:
@@ -234,6 +238,56 @@ class Unaligned3dDatasetTest(unittest.TestCase):
       if len(seen_samples) == 8:
           break
     self.assertEqual(len(seen_samples), 8)
+
+  def test_smaller_stride(self):
+    create_train_data(np.arange(64).reshape(1, 4, 4, 4))
+    opt = TestOptions([2, 2, 2])
+    opt.serial_batches = False
+    opt.dataset_stride = (1, 1, 1)
+    dataset = Unaligned3dDataset(opt)
+
+    self.assertEqual(len(dataset), 27)
+    npt.assert_array_equal(dataset[0]['A'], np.array([[[[0, 1], [4, 5]], [[16, 17], [20, 21]]]]))
+    npt.assert_array_equal(dataset[1]['A'], np.array([[[[1, 2], [5, 6]], [[17, 18], [21, 22]]]]))
+    npt.assert_array_equal(dataset[2]['A'], np.array([[[[2, 3], [6, 7]], [[18, 19], [22, 23]]]]))
+
+    self.assertEqual(dataset[3]['A'][0, 0, 0, 0], 4)
+    self.assertEqual(dataset[4]['A'][0, 0, 0, 0], 5)
+    self.assertEqual(dataset[5]['A'][0, 0, 0, 0], 6)
+
+    self.assertEqual(dataset[9]['A'][0, 0, 0, 0], 16)
+    self.assertEqual(dataset[10]['A'][0, 0, 0, 0], 17)
+
+    self.assertEqual(dataset[18]['A'][0, 0, 0, 0], 32)
+    self.assertEqual(dataset[26]['A'][0, 0, 0, 0], 42)
+
+  def test_smaller_stride_with_mask(self):
+    create_train_data(np.arange(512).reshape(1, 8, 8, 8))
+    with h5py.File(os.path.join(tmp_dir, 'trainA', 'test.h5'), 'a') as f:
+      mask = np.ones((10, 20, 20), dtype=bool)
+      mask[:, :, -1] = False # should have no effect because x stride is 3
+      mask[4, 0:4, 0:4] = False
+      mask[7, 7, 6] = False
+      f.create_dataset('mask', data=mask)
+
+    opt = TestOptions([4, 4, 4])
+    opt.datasetA_mask = 'mask'
+    opt.dataset_stride = (2, 1, 3)
+    opt.dataset_length = 'min'
+    dataset = Unaligned3dDataset(opt)
+
+    self.assertEqual(len(dataset), 3*5*2 - 16 - 1)
+    npt.assert_array_equal(dataset[0]['A'], np.array([[[[0, 1, 2, 3], [8, 9, 10, 11], [16, 17, 18, 19], [24, 25, 26, 27]],
+                                                       [[64, 65, 66, 67], [72, 73, 74, 75], [80, 81, 82, 83], [88, 89, 90, 91]],
+                                                       [[128, 129, 130, 131], [136, 137, 138, 139], [144, 145, 146, 147], [152, 153, 154, 155]],
+                                                       [[192, 193, 194, 195], [200, 201, 202, 203], [208, 209, 210, 211], [216, 217, 218, 219]]]]))
+    self.assertEqual(dataset[1]['A'][0, 0, 0, 0], 3)
+    self.assertEqual(dataset[2]['A'][0, 0, 0, 0], 8)
+    self.assertEqual(dataset[3]['A'][0, 0, 0, 0], 11)
+    self.assertEqual(dataset[9]['A'][0, 0, 0, 0], 35)
+    self.assertEqual(dataset[10]['A'][0, 0, 0, 0], 160)
+    self.assertEqual(dataset[11]['A'][0, 0, 0, 0], 163)
+    self.assertEqual(dataset[12]['A'][0, 0, 0, 0], 288)
     
   def setUp(self) -> None:
     clear_tmp()

@@ -50,6 +50,7 @@ class Unaligned3dDataset(BaseDataset):
         parser.add_argument('--datasetB_mask', type=str, default=None, help='The name of the dataset to use as mask for dataset B')
         parser.add_argument('--dataset_length', type=str, default='max', choices=['min', 'max'], help='How to determine the size of the entire dataset given the sizes of dataset A and dataset B')
         parser.add_argument('--no_normalization', action='store_true', help='If specified the samples are not normalized')
+        parser.add_argument('--dataset_stride', type=int, nargs=3, default=None, help='The stride of the kernel that moves thorugh the data array to sample inputs')
 
         return parser
 
@@ -71,10 +72,16 @@ class Unaligned3dDataset(BaseDataset):
         self.samples_per_image_B: npt.NDArray
         self.samples_per_image_A: npt.NDArray
         self.samples_per_image_B: npt.NDArray
-        self.sample_shape_A = []
-        self.sample_shape_B = []
+        self.sample_count_per_axis_A = []
+        self.sample_count_per_axis_B = []
         self.samples_to_skip_A = None
         self.samples_to_skip_B = None
+
+        if opt.dataset_stride:
+            assert all(map(lambda x: x > 0, opt.dataset_stride)), 'Invalid dataset_stride'
+            self.dataset_stride = np.array(opt.dataset_stride, dtype=int)
+        else:
+            self.dataset_stride = np.array(opt.sample_size, dtype=int)
 
         self.A_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'A', opt.datasetA_file), opt.datasetA_names, [opt.datasetA_mask])
         self.B_images = get_datasets(os.path.join(opt.dataroot, opt.phase + 'B', opt.datasetB_file), opt.datasetB_names, [opt.datasetB_mask])
@@ -122,26 +129,30 @@ class Unaligned3dDataset(BaseDataset):
 
     def init_samples_no_mask(self, side: Literal['A'] | Literal['B']):
         samples_per_image = []
-        sample_shape = getattr(self, 'sample_shape_' + side)
+        sample_count_per_axis = getattr(self, 'sample_count_per_axis_' + side)
 
         for image in getattr(self, side + '_images'):
-            sample_shape.append(np.floor(np.array(image.shape[1:]) / np.array(self.opt.sample_size)))
-            samples_per_image.append(sample_shape[-1].prod())
+            sample_count_per_axis.append(np.floor(
+                (np.array(image.shape[1:]) - self.opt.sample_size) / self.dataset_stride + 1
+            ))
+            samples_per_image.append(sample_count_per_axis[-1].prod())
         setattr(self, 'samples_per_image_' + side, np.cumsum(samples_per_image, dtype=int))
 
     def init_samples_with_mask(self, side: Literal['A'] | Literal['B']):
         setattr(self, 'samples_to_skip_' + side, SortedDict())
-        sample_shape = getattr(self, 'sample_shape_' + side)
+        sample_count_per_axis = getattr(self, 'sample_count_per_axis_' + side)
         samples_to_skip = getattr(self, 'samples_to_skip_' + side)
 
         image = getattr(self, side + '_images')[0]
         mask = getattr(self, side + '_mask')
 
-        sample_shape.append(np.floor(np.array(image.shape[1:]) / np.array(self.opt.sample_size)))
-        max_sample_count = int(sample_shape[0].prod())
+        sample_count_per_axis.append(np.floor(
+            (np.array(image.shape[1:]) - self.opt.sample_size) / self.dataset_stride + 1
+        ))
+        max_sample_count = int(sample_count_per_axis[0].prod())
         skips = 0
         for i in range(max_sample_count):
-            i_slice = self.get_nth_sample(sample_shape[0], i)
+            i_slice = self.get_nth_sample(sample_count_per_axis[0], i)
             if not mask[i_slice].all():
                 skips += 1
             elif skips != 0:
@@ -153,7 +164,7 @@ class Unaligned3dDataset(BaseDataset):
             samples_to_skip[max_sample_count - skips] = skips
 
         unusable_samples = 0 if len(samples_to_skip) == 0 else samples_to_skip.peekitem()[1]
-        setattr(self, 'samples_per_image_' + side, np.array([sample_shape[-1].prod() - unusable_samples], dtype=int))
+        setattr(self, 'samples_per_image_' + side, np.array([max_sample_count - unusable_samples], dtype=int))
 
     def get_nth_sample(self, shape, n):
         z = int(n / (shape[1] * shape[2]))
@@ -161,9 +172,9 @@ class Unaligned3dDataset(BaseDataset):
         y = int(n / shape[2])
         x = int(n - y * shape[2])
 
-        z *= self.opt.sample_size[0]
-        y *= self.opt.sample_size[1]
-        x *= self.opt.sample_size[2]
+        z *= self.dataset_stride[0]
+        y *= self.dataset_stride[1]
+        x *= self.dataset_stride[2]
 
         return (slice(z, z+self.opt.sample_size[0]), slice(y, y+self.opt.sample_size[1]), slice(x, x+self.opt.sample_size[2]))
 
@@ -195,12 +206,7 @@ class Unaligned3dDataset(BaseDataset):
             index -- a random integer for data indexing
 
         Returns:
-            a dictionary of data with their names. It usually contains the data itself and its metadata information.
-
-        Step 1: get a random image path: e.g., path = self.image_paths[index]
-        Step 2: load your data from the disk: e.g., image = Image.open(path).convert('RGB').
-        Step 3: convert your data to a PyTorch tensor. You can use helper functions such as self.transform. e.g., data = self.transform(image)
-        Step 4: return a data point as a dictionary.
+            a dictionary of data with their names.
         """
         assert index < self.len
         indexA = index % self.samples_per_image_A[-1]
@@ -219,8 +225,8 @@ class Unaligned3dDataset(BaseDataset):
             B_index_in_image = random.randint(0, self.samples_per_image_B[B_image_index] - \
                 (self.samples_per_image_B[B_image_index - 1] if B_image_index > 0 else 0) - 1)
 
-        A_shape = self.sample_shape_A[A_image_index]
-        B_shape = self.sample_shape_B[B_image_index]
+        A_shape = self.sample_count_per_axis_A[A_image_index]
+        B_shape = self.sample_count_per_axis_B[B_image_index]
 
         A_img = self.A_images[A_image_index][(slice(None),) + self.get_nth_sample(A_shape, A_index_in_image)]
         B_img = self.B_images[B_image_index][(slice(None),) + self.get_nth_sample(B_shape, B_index_in_image)]
