@@ -21,7 +21,8 @@ def create_train_data(data=None):
     f.create_dataset('dataset1', data=data)
 
 class TestOptions:
-  border_offset = [0, 0, 0]
+  border_offset_A = [0, 0, 0]
+  border_offset_B = [0, 0, 0]
   dataroot = tmp_dir
   phase = 'train'
   datasetA_file = 'test.h5'
@@ -230,6 +231,8 @@ class Unaligned3dDatasetTest(unittest.TestCase):
 
     for _ in range(200):
       seen_samples.add(tuple(dataset[0]['B'].numpy().flatten()))
+      if len(seen_samples) == 8:
+          break
     self.assertEqual(len(seen_samples), 8)
     
   def setUp(self) -> None:
