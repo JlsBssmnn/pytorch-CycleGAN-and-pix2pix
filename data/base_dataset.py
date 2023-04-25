@@ -9,6 +9,7 @@ import torch.utils.data as data
 from PIL import Image
 import torchvision.transforms as transforms
 from abc import ABC, abstractmethod
+from models import networks_3d
 from util.logging_config import logging
 
 
@@ -123,6 +124,8 @@ def get_transform_3d(opt, params=None, grayscale=False, method=transforms.Interp
     if convert:
         transform_list += [transforms.Lambda(ToTensor)]
         transform_list += [transforms.Lambda(normalize_equally)]
+    
+    transform_list += networks_3d.get_augmentation_transform(opt)
     return transforms.Compose(transform_list)
 
 

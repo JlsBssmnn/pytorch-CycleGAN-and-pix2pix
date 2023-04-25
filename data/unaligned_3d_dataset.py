@@ -22,6 +22,7 @@ from sortedcontainers import SortedDict
 from data.base_dataset import BaseDataset, get_transform_3d
 from data.h5_folder import get_datasets
 from util.logging_config import logging
+from util.misc import StoreDictKeyPair
 
 
 class Unaligned3dDataset(BaseDataset):
@@ -51,6 +52,8 @@ class Unaligned3dDataset(BaseDataset):
         parser.add_argument('--dataset_length', type=str, default='max', choices=['min', 'max'], help='How to determine the size of the entire dataset given the sizes of dataset A and dataset B')
         parser.add_argument('--no_normalization', action='store_true', help='If specified the samples are not normalized')
         parser.add_argument('--dataset_stride', type=int, nargs=3, default=None, help='The stride of the kernel that moves thorugh the data array to sample inputs')
+        parser.add_argument('--augmentation_transforms', action=StoreDictKeyPair, default=None, nargs="+",
+                            metavar="KEY=VAL", help='Transformations that are applied to the sampled patches.')
 
         return parser
 

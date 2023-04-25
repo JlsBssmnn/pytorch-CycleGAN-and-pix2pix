@@ -4,6 +4,7 @@ from torch.nn import init
 import torchvision
 import functools
 from torch.optim import lr_scheduler
+from models.custom_transforms import RandomDiscreteRotation, RandomFlip
 from util.logging_config import logging
 from pytorch_3dunet.pytorch3dunet.unet3d.model import UNet3D, ResidualUNet3D, ResidualUNetSE3D, AbstractUNet
 
@@ -48,6 +49,23 @@ class Scaler():
 
     def __call__(self, x):
         return x * self.scaling + self.offset
+
+def get_augmentation_transform(opt):
+    """
+    Creates a list of transformation functions that can be applied to an extracted
+    patch. It randomly applies the transformations that are specified in the provided
+    options object.
+    """
+    transformations = []
+    if opt.augmentation_transforms is None:
+        return transformations
+
+    for t in opt.augmentation_transforms:
+        if t['name'] == 'rotation':
+            transformations.append(RandomDiscreteRotation(t['angles'], t['axes']))
+        elif t['name'] == 'flip':
+            transformations.append(RandomFlip())
+    return transformations
 
 def get_post_transform(transform=None, **kwargs):
     if transform is None or transform == 'identity':
