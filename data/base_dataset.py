@@ -124,6 +124,9 @@ def get_transform_3d(opt, params=None, grayscale=False, method=transforms.Interp
     if convert:
         transform_list += [transforms.Lambda(ToTensor)]
         transform_list += [transforms.Lambda(normalize_equally)]
+
+    if opt.colorize:
+        transform_list += [transforms.Lambda(colorize_transform)]
     
     transform_list += networks_3d.get_augmentation_transform(opt)
     return transforms.Compose(transform_list)
@@ -141,6 +144,15 @@ def ToTensor(np_array):
 # basically equivalent to transforms.Normalize with 0.5 for all channels
 def normalize_equally(tensor):
     return (tensor - 0.5) / 0.5
+
+def colorize_transform(tensor):
+    """
+    Takes an image tensor and transforms it s.t. it has at least 3
+    color channels.
+    """
+    assert tensor.shape[0] == 1
+    tensor = torch.cat((tensor,)*3, dim=0)
+    return tensor
 
 
 def __transforms2pil_resize(method):

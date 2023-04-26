@@ -54,6 +54,7 @@ class Unaligned3dDataset(BaseDataset):
         parser.add_argument('--dataset_stride', type=int, nargs=3, default=None, help='The stride of the kernel that moves thorugh the data array to sample inputs')
         parser.add_argument('--augmentation_transforms', action=StoreDictKeyPair, default=None, nargs="+",
                             metavar="KEY=VAL", help='Transformations that are applied to the sampled patches.')
+        parser.add_argument('--colorize', action='store_true', help='If true, grayscale images will be converted to 3-channel color images')
 
         return parser
 
