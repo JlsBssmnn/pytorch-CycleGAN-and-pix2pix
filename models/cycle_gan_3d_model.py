@@ -43,8 +43,10 @@ class CycleGAN3dModel(BaseModel):
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
-            parser.add_argument('--post_transform_A', type=str, default=None, help='transformation that is applied to a generated image from Gen_A (fake_B) before it is given to the discriminator')
-            parser.add_argument('--post_transform_B', type=str, default=None, help='transformation that is applied to a generated image from Gen_B (fake_A) before it is given to the discriminator')
+            parser.add_argument('--post_transforms_A', type=str, default=None, help='Transformations that are applied to the output of Gen_A to create fake_B')
+            parser.add_argument('--post_transforms_B', type=str, default=None, help='Transformations that are applied to the output of Gen_B to create fake_A')
+            parser.add_argument('--disc_transforms_A', type=str, default=None, help='Transformations that are applied to the real image before it is given to discriminator A')
+            parser.add_argument('--disc_transforms_B', type=str, default=None, help='Transformations that are applied to the real image before it is given to discriminator B')
 
             parser.add_argument('--disc_1x2x2_kernel_scale', action='store_true', default=False, help='Passed to NLayerDiscriminator')
             parser.add_argument('--disc_extra_xy_conv', action='store_true', default=False, help='Passed to NLayerDiscriminator')
@@ -100,6 +102,9 @@ class CycleGAN3dModel(BaseModel):
                                             **object_to_dict(opt.discriminator_config))
             self.post_transform_A = networks_3d.get_post_transform(opt.post_transforms_A)
             self.post_transform_B = networks_3d.get_post_transform(opt.post_transforms_B)
+
+            self.disc_transform_A = networks_3d.get_post_transform(opt.disc_transforms_A)
+            self.disc_transform_B = networks_3d.get_post_transform(opt.disc_transforms_B)
 
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
@@ -159,12 +164,12 @@ class CycleGAN3dModel(BaseModel):
     def backward_D_A(self):
         """Calculate GAN loss for discriminator D_A"""
         fake_B = self.fake_B_pool.query(self.fake_B)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.disc_transform_A(self.real_B), fake_B)
 
     def backward_D_B(self):
         """Calculate GAN loss for discriminator D_B"""
         fake_A = self.fake_A_pool.query(self.fake_A)
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
+        self.loss_D_B = self.backward_D_basic(self.netD_B, self.disc_transform_B(self.real_A), fake_A)
 
     def backward_G(self):
         """Calculate the loss for generators G_A and G_B"""

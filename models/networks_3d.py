@@ -4,7 +4,7 @@ from torch.nn import init
 import torchvision
 import functools
 from torch.optim import lr_scheduler
-from models.custom_transforms import RandomDiscreteRotation, RandomFlip
+from models.custom_transforms import RandomDiscreteRotation, RandomFlip, RandomPixelModifier, RandomGaussianNoise
 from util.logging_config import logging
 from pytorch_3dunet.pytorch3dunet.unet3d.model import UNet3D, ResidualUNet3D, ResidualUNetSE3D, AbstractUNet
 
@@ -76,10 +76,23 @@ def get_post_transform(transform=None, **kwargs):
             f = get_post_transform(transform_name, **params)
             transform_list.append(f)
         return torchvision.transforms.Compose(transform_list)
+    elif type(transform) == list:
+        transform_list = []
+        for transform_dict in transform:
+            assert type(transform_dict) == dict
+            assert 'name' in transform_dict
+            f = get_post_transform(transform_dict['name'], \
+                **{k:v for (k,v) in transform_dict.items() if k != 'name'})
+            transform_list.append(f)
+        return torchvision.transforms.Compose(transform_list)
     elif transform == 'threshold':
         return Threshold(**kwargs)
     elif transform == 'scaler':
         return Scaler(**kwargs)
+    elif transform == 'RandomPixelModifier':
+        return RandomPixelModifier(**kwargs)
+    elif transform == 'RandomGaussianNoise':
+        return RandomGaussianNoise(**kwargs)
     elif transform == 'tanh_to_uint8':
         return Scaler(-1, 1, 0, 255)
     elif transform == 'sigmoid_to_uint8':
