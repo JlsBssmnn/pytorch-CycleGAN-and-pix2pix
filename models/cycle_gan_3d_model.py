@@ -66,13 +66,18 @@ class CycleGAN3dModel(BaseModel):
         """
         BaseModel.__init__(self, opt)  # call the initialization method of BaseModel
         assert opt.dataset_mode == 'unaligned_3d'
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B']
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'D_B', 'G_B', 'cycle_B']
         # specify the images you want to save and display.
         visual_names_A = ['real_A', 'fake_B', 'rec_A']
         visual_names_B = ['real_B', 'fake_A', 'rec_B']
+        if opt.post_transforms_A is not None:
+            visual_names_A += ['raw_fake_B']
+        if opt.post_transforms_B is not None:
+            visual_names_B += ['raw_fake_A']
         if self.isTrain and self.opt.lambda_identity > 0.0:  # if identity loss is used, we also visualize idt_B=G_A(B) ad idt_A=G_A(B)
             visual_names_A.append('idt_B')
             visual_names_B.append('idt_A')
+            self.loss_names += ['idt_A', 'idt_B']
         self.visual_names = visual_names_A + visual_names_B
 
         # specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks to save and load networks.
@@ -134,9 +139,11 @@ class CycleGAN3dModel(BaseModel):
 
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.post_transform_A(self.generator_output_f(self.netG_A(self.real_A)))  # G_A(A)
+        self.raw_fake_B = self.generator_output_f(self.netG_A(self.real_A))
+        self.fake_B = self.post_transform_A(self.raw_fake_B)  # G_A(A)
         self.rec_A = self.generator_output_f(self.netG_B(self.fake_B))   # G_B(G_A(A))
-        self.fake_A = self.post_transform_B(self.generator_output_f(self.netG_B(self.real_B)))  # G_B(B)
+        self.raw_fake_A = self.generator_output_f(self.netG_B(self.real_B))
+        self.fake_A = self.post_transform_B(self.raw_fake_A)  # G_B(B)
         self.rec_B = self.generator_output_f(self.netG_A(self.fake_A))   # G_A(G_B(B))
 
     def backward_D_basic(self, netD, real, fake):

@@ -292,7 +292,7 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
         [pixel]: 1x1 PixelGAN discriminator can classify whether a pixel is real or not.
         It encourages greater color diversity but has no effect on spatial statistics.
 
-    The discriminator has been initialized by <init_net>. It uses Leakly RELU for non-linearity.
+    The discriminator has been initialized by <init_net>. It uses Leaky RELU for non-linearity.
     """
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
@@ -346,7 +346,7 @@ class GANLoss(nn.Module):
         """Create label tensors with the same size as the input.
 
         Parameters:
-            prediction (tensor) - - tpyically the prediction from a discriminator
+            prediction (tensor) - - typically the prediction from a discriminator
             target_is_real (bool) - - if the ground truth label is for real images or fake images
 
         Returns:
@@ -360,10 +360,10 @@ class GANLoss(nn.Module):
         return target_tensor.expand_as(prediction)
 
     def __call__(self, prediction, target_is_real):
-        """Calculate loss given Discriminator's output and grount truth labels.
+        """Calculate loss given Discriminator's output and ground truth labels.
 
         Parameters:
-            prediction (tensor) - - tpyically the prediction output from a discriminator
+            prediction (tensor) - - typically the prediction output from a discriminator
             target_is_real (bool) - - if the ground truth label is for real images or fake images
 
         Returns:
