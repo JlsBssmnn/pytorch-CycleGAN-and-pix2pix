@@ -17,7 +17,7 @@ class Transform:
 
         self.transform = globals()[name](**kwargs)
 
-    def __call__(self, x):
+    def transform_image(self, x):
         inputs = []
         x = x.detach().clone()
         for t in self.wrapper:
@@ -27,6 +27,18 @@ class Transform:
         for t, out in zip(reversed(self.wrapper), reversed(inputs)):
             x = t.post(x, out)
         return x
+
+    def __call__(self, x):
+        if x.ndim == 4:
+            return self.transform_image(x)
+        elif x.ndim == 5:
+            output = torch.empty(x.shape)
+            for i in range(x.shape[0]):
+                output[i] = self.transform_image(x[i])
+            return output
+        else:
+            raise NotImplementedError('Transform cannot be applied to dimensionality %d' % x.ndim)
+
 
 class Slicer:
     """
@@ -124,6 +136,17 @@ class Threshold():
     def __call__(self, x):
         x[x >= self.threshold] = self.upper
         x[x < self.threshold] = self.lower
+        return x
+
+class SetValue:
+    """
+    Sets the value of every voxel to the specified value.
+    """
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self, x):
+        x[:] = self.value
         return x
 
 
