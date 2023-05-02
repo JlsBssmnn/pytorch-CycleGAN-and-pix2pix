@@ -4,38 +4,68 @@ import torchvision
 from torchvision.transforms import functional
 import random
 
-class Abstract2DTransform(ABC):
-    def __init__(self, axes: list[str]=['xy']):
-        assert all(map(lambda ax: len(ax) == 2 and ax in 'xyz', axes))
-        self.axes = axes
+class Transform:
+    """
+    This class represents a transform. It can apply certain
+    pre- and post-processing steps that are required for a
+    transformation.
+    """
+    def __init__(self, name, slice_string=None, **kwargs):
+        self.wrapper = []
+        if slice_string is not None:
+            self.wrapper.append(Slicer(slice_string))
 
-    @abstractmethod
-    def transform(self, x: torch.Tensor) -> torch.Tensor:
-        pass
+        self.transform = globals()[name](**kwargs)
 
-    def __call__(self, x: torch.Tensor):
-        for ax in self.axes:
-            if 'z' in ax:
-                x = torch.swapaxes(x, -3, -1 if 'y' in ax else -2)
-            x = self.transform(x)
-            if 'z' in ax:
-                x = torch.swapaxes(x, -1 if 'y' in ax else -2, -3)
+    def __call__(self, x):
+        inputs = []
+        x = x.detach().clone()
+        for t in self.wrapper:
+            inputs.append(x)
+            x = t.pre(x)
+        x = self.transform(x)
+        for t, out in zip(reversed(self.wrapper), reversed(inputs)):
+            x = t.post(x, out)
         return x
 
-class RandomDiscreteRotation(Abstract2DTransform):
-    def __init__(self, angles: list[int], axes=['xy']):
-        super().__init__(axes)
+class Slicer:
+    """
+    A processing step for a transformation. It will only apply
+    the transformation on a slice of the input.
+    """
+    def __init__(self, slice_string=None):
+        if slice_string is None:
+            self.slice = None
+            return
+
+        self.slice = slice_string.split(',')
+        self.slice = [x.split(':') for x in self.slice]
+        self.slice = [[eval(y) for y in x] for x in self.slice]
+        self.slice = tuple([slice(*x) for x in self.slice])
+
+    def pre(self, x):
+        return x[self.slice]
+
+    def post(self, x, original):
+        original[self.slice] = x
+        return original
+
+class RandomDiscreteRotation:
+    """
+    Randomly rotates the input by one of the given angles.
+    """
+    def __init__(self, angles: list[int]):
         self.angles = angles
 
-    def transform(self, x):
+    def __call__(self, x):
         angle = random.choice(self.angles)
         return functional.rotate(x, angle, expand=True)
 
-class RandomFlip(Abstract2DTransform):
-    def __init__(self, axes=['xy']):
-        super().__init__(axes)
-
-    def transform(self, x):
+class RandomFlip:
+    """
+    Randomly flips the input vertically and/or horizontally.
+    """
+    def __call__(self, x):
         if random.getrandbits(1):
             x = functional.hflip(x)
         if random.getrandbits(1):
@@ -43,6 +73,11 @@ class RandomFlip(Abstract2DTransform):
         return x
 
 class RandomPixelModifier:
+    """
+    Creates a random mask where each pixel is included with a
+    probability of `change_probability`. All voxels of that
+    mask are then set to the given value.
+    """
     def __init__(self, change_probability, value):
         self.change_probability = change_probability
         self.value = value
@@ -54,6 +89,9 @@ class RandomPixelModifier:
         return x
 
 class RandomGaussianNoise:
+    """
+    Applies a gaussian noise to the input.
+    """
     def __init__(self, mean, std):
         self.mean = mean
         self.std = std
@@ -67,6 +105,11 @@ class RandomGaussianNoise:
         return torch.clamp(x + noise, origin_dtype.min, origin_dtype.max).type(x.dtype)
 
 class Threshold():
+    """
+    Thresholds the input: All values below the threshold are
+    mapped to the lower value, all other values are mapped
+    to the upper value.
+    """
     def __init__(self, lower, upper, threshold=None):
         assert lower < upper
 
@@ -79,13 +122,17 @@ class Threshold():
             self.threshold = threshold
 
     def __call__(self, x):
-        x = x.clone()
         x[x >= self.threshold] = self.upper
         x[x < self.threshold] = self.lower
         return x
 
 
 class Scaler():
+    """
+    Scales the values of the input. The input value range is between
+    `in_min` and `in_max`. The values are scaled to the range between
+    `out_min` and `out_max`.
+    """
     def __init__(self, in_min, in_max, out_min, out_max):
         assert in_min < in_max and out_min < out_max
 
@@ -178,6 +225,5 @@ def create_transform(transform_list: list | str | None):
             transformations.append(get_transform_by_string(t))
         else:
             assert 'name' in t, "A transformation must have a name"
-            transform = globals()[t['name']]
-            transformations.append(transform(**{k:v for (k,v) in t.items() if k != 'name'}))
+            transformations.append(Transform(**t))
     return torchvision.transforms.Compose(transformations)
