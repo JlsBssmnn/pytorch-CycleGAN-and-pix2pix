@@ -1,10 +1,12 @@
 import numpy as np
+import torch
 import os
 import sys
 import ntpath
 import time
 
 from models import networks_3d
+from models.custom_transforms import create_transform
 from . import util, html
 from subprocess import Popen, PIPE
 import h5py
@@ -83,7 +85,7 @@ class Visualizer():
         self.wandb_project_name = opt.wandb_project_name
         self.current_epoch = 0
         self.ncols = opt.display_ncols
-        self.tanh_to_uint8 = networks_3d.get_post_transform('tanh_to_uint8')
+        self.tanh_to_uint8 = create_transform('tanh_to_uint8')
 
         if opt.dataset_mode == 'unaligned_3d':
             self.display_current_results = self.display_current_results_3d
@@ -234,10 +236,10 @@ class Visualizer():
                 g = f.create_group(group_name)
 
                 for label, image in visuals.items():
+                    image = self.tanh_to_uint8(image).type(torch.uint8)
                     image = image.cpu().detach().numpy()
                     if image.ndim == 5:
                         image = image[0]
-                    image = self.tanh_to_uint8(image).astype(np.uint8)
                     d = g.create_dataset(label, data=image)
 
                     if self.opt.element_size_um is not None:

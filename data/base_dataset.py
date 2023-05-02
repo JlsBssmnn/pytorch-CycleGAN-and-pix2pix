@@ -10,6 +10,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 from abc import ABC, abstractmethod
 from models import networks_3d
+from models.custom_transforms import create_transform
 from util.logging_config import logging
 
 
@@ -115,20 +116,17 @@ def get_transform(opt, params=None, grayscale=False, method=transforms.Interpola
     return transforms.Compose(transform_list)
 
 
-def get_transform_3d(opt, params=None, grayscale=False, method=transforms.InterpolationMode.BICUBIC, convert=True):
+def get_transform_3d(opt, direction):
     transform_list = []
     if opt.no_normalization:
         transform_list += [torch.tensor]
         return transforms.Compose(transform_list)
 
-    if convert:
-        transform_list += [transforms.Lambda(ToTensor)]
-        transform_list += [transforms.Lambda(normalize_equally)]
+    transform_list += [transforms.Lambda(ToTensor)]
+    transform_list += [transforms.Lambda(normalize_equally)]
 
-    if opt.colorize:
-        transform_list += [transforms.Lambda(colorize_transform)]
-    
-    transform_list += networks_3d.get_augmentation_transform(opt)
+    dataset_transform_opt = getattr(opt, 'dataset_transforms_' + direction)
+    transform_list += [create_transform(dataset_transform_opt)]
     return transforms.Compose(transform_list)
 
 
@@ -144,15 +142,6 @@ def ToTensor(np_array):
 # basically equivalent to transforms.Normalize with 0.5 for all channels
 def normalize_equally(tensor):
     return (tensor - 0.5) / 0.5
-
-def colorize_transform(tensor):
-    """
-    Takes an image tensor and transforms it s.t. it has at least 3
-    color channels.
-    """
-    assert tensor.shape[0] == 1
-    tensor = torch.cat((tensor,)*3, dim=0)
-    return tensor
 
 
 def __transforms2pil_resize(method):

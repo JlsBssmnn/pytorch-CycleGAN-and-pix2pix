@@ -17,7 +17,6 @@ from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
-import torch
 from sortedcontainers import SortedDict
 from data.base_dataset import BaseDataset, get_transform_3d
 from data.h5_folder import get_datasets
@@ -126,10 +125,8 @@ class Unaligned3dDataset(BaseDataset):
             logging.error('Invalid dataset_length parameter!')
             exit(1)
 
-        input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
-        output_nc = self.opt.input_nc if self.opt.direction == 'BtoA' else self.opt.output_nc
-        self.transform_A = get_transform_3d(self.opt, grayscale=(input_nc == 1))
-        self.transform_B = get_transform_3d(self.opt, grayscale=(output_nc == 1))
+        self.transform_A = get_transform_3d(self.opt, 'A')
+        self.transform_B = get_transform_3d(self.opt, 'B')
 
     def init_samples_no_mask(self, side: Literal['A'] | Literal['B']):
         samples_per_image = []

@@ -17,6 +17,8 @@ You need to implement the following functions:
 """
 import torch
 import itertools
+from models import custom_transforms
+from models.custom_transforms import create_transform
 from util.image_pool import ImagePool
 from util.my_utils import object_to_dict
 from .base_model import BaseModel
@@ -96,7 +98,7 @@ class CycleGAN3dModel(BaseModel):
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids,
                                         **object_to_dict(opt.generator_config))
 
-        self.generator_output_f = networks_3d.Scaler(opt.generator_output_range[0], opt.generator_output_range[1], -1, 1)
+        self.generator_output_f = custom_transforms.Scaler(opt.generator_output_range[0], opt.generator_output_range[1], -1, 1)
 
         if self.isTrain:  # define discriminators
             self.netD_A = networks_3d.define_D(opt.output_nc, opt.ndf, opt.netD,
@@ -105,11 +107,11 @@ class CycleGAN3dModel(BaseModel):
             self.netD_B = networks_3d.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids,
                                             **object_to_dict(opt.discriminator_config))
-            self.post_transform_A = networks_3d.get_post_transform(opt.post_transforms_A)
-            self.post_transform_B = networks_3d.get_post_transform(opt.post_transforms_B)
+            self.post_transform_A = create_transform(opt.post_transforms_A)
+            self.post_transform_B = create_transform(opt.post_transforms_B)
 
-            self.disc_transform_A = networks_3d.get_post_transform(opt.disc_transforms_A)
-            self.disc_transform_B = networks_3d.get_post_transform(opt.disc_transforms_B)
+            self.disc_transform_A = create_transform(opt.disc_transforms_A)
+            self.disc_transform_B = create_transform(opt.disc_transforms_B)
 
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
