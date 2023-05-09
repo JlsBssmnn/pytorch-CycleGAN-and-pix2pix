@@ -10,10 +10,15 @@ class Transform:
     pre- and post-processing steps that are required for a
     transformation.
     """
-    def __init__(self, name, slice_string=None, **kwargs):
+    def __init__(self, name, **kwargs):
         self.wrapper = []
-        if slice_string is not None:
-            self.wrapper.append(Slicer(slice_string))
+        for k in list(kwargs.keys()):
+            if k == 'slice_string':
+                self.wrapper.append(Slicer(kwargs['slice_string']))
+                del kwargs['slice_string']
+            elif k == 'mask_condition':
+                self.wrapper.append(Masker(kwargs['mask_condition']))
+                del kwargs['mask_condition']
 
         self.transform = globals()[name](**kwargs)
 
@@ -60,6 +65,23 @@ class Slicer:
 
     def post(self, x, original):
         original[self.slice] = x
+        return original
+
+class Masker:
+    """
+    A processing step for a transformation. It will only apply the transformation
+    to the mask that is defined by the provided condition. The condition can be any
+    python code that evaluates to a mask. The input image is accessible as `x`.
+    """
+    def __init__(self, condition):
+        self.condition = condition
+
+    def pre(self, x):
+        self.mask = eval(self.condition)
+        return x[self.mask]
+
+    def post(self, x, original):
+        original[self.mask] = x
         return original
 
 class RandomDiscreteRotation:
