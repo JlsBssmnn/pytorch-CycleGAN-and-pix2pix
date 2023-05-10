@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import torch
+import perlin_numpy
 import torchvision
 from torchvision.transforms import functional
 import random
@@ -78,10 +79,10 @@ class Masker:
 
     def pre(self, x):
         self.mask = eval(self.condition)
-        return x[self.mask]
+        return x
 
     def post(self, x, original):
-        original[self.mask] = x
+        original[self.mask] = x[self.mask]
         return original
 
 class RandomDiscreteRotation:
@@ -132,6 +133,26 @@ class RandomGaussianNoise:
 
     def __call__(self, x):
         noise = torch.normal(self.mean, self.std, x.shape)
+        if x.dtype.is_floating_point:
+            origin_dtype = torch.finfo(x.dtype)
+        else:
+            origin_dtype = torch.iinfo(x.dtype)
+        return torch.clamp(x + noise, origin_dtype.min, origin_dtype.max).type(x.dtype)
+
+class RandomPerlinNoise:
+    """
+    Applies a perlin noise to the input.
+    """
+    def __init__(self, resolution, strength):
+        self.resolution = resolution
+        self.strength = strength
+
+    def __call__(self, x):
+        noise = perlin_numpy.generate_perlin_noise_3d(x.shape[-3:], self.resolution)
+        noise = torch.from_numpy(noise)
+        noise *= self.strength / torch.max(torch.abs(noise.max()), torch.abs(noise.min()))
+        noise = torch.stack((noise,)*x.shape[0], dim=0)
+
         if x.dtype.is_floating_point:
             origin_dtype = torch.finfo(x.dtype)
         else:
