@@ -110,6 +110,12 @@ class BaseModel(ABC):
         """Calculate additional output images for visdom and HTML visualization"""
         pass
 
+    def batch_processed(self, batch_size):
+        """
+        This is run after a batch was processed.
+        """
+        pass
+
     def get_image_paths(self):
         """ Return image paths that are used to load current data"""
         return self.image_paths

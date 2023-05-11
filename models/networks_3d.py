@@ -217,11 +217,13 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
     norm_layer = get_norm_layer(norm_type=norm)
 
     if netD == 'basic':  # default PatchGAN classifier
-        net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer)
+        net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer, **kwargs)
     elif netD == 'n_layers':  # more options
         net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer, **kwargs)
     elif netD == 'pixel':     # classify if each pixel is real or fake
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
+    elif netD == 'progressive':
+        net = ProgressiveDiscriminator(input_nc, ndf=ndf, norm_layer=norm_layer, **kwargs)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -577,6 +579,94 @@ class UnetSkipConnectionBlock(nn.Module):
             return self.model(x)
         else:   # add skip connections
             return torch.cat([x, self.model(x)], 1)
+
+
+class ProgressiveDiscriminator(nn.Module):
+    """Defines a progressively growing discriminator"""
+
+    def __init__(self, input_nc, n_layers_start, n_layers_end, data_per_new_layer, fade_in_ratio, ndf=16, norm_layer=nn.BatchNorm3d):
+        """Construct a progressive discriminator
+
+        Parameters:
+            input_nc (int)             -- the number of channels in input images
+            n_layers_start (int)       -- number of layers at the start of growing
+            n_layers_end (int)         -- number of layers at the end of growing
+            data_per_new_layer (int)   -- how many data points have to be processed to activate a new layer
+            fade_in_ratio (float)      -- how long to fade in a layer as ratio of `data_per_new_layer`
+            ndf (int)                  -- the number of filters in the last conv layer
+            norm_layer                 -- normalization layer
+        """
+        super(ProgressiveDiscriminator, self).__init__()
+        assert 0 < fade_in_ratio
+        assert n_layers_start <= n_layers_end
+        assert 0 < data_per_new_layer
+        assert 0 < n_layers_start, 'The discriminator must start with at least 1 layer'
+
+        self.alpha_start = 1e-5
+        self.n_layers_end = n_layers_end
+        self.data_per_new_layer = data_per_new_layer
+        self.alpha_delta = 1 / (fade_in_ratio * data_per_new_layer) # How much to increase alpha each epoch
+
+        self.n_layers = n_layers_start
+        self.alpha = 1
+        self.data_till_new_layer = data_per_new_layer * fade_in_ratio
+        kw = 3
+        padw = 1
+
+        class ConvBlock(nn.Module):
+            def __init__(self, in_channels, out_channels):
+                super(ConvBlock, self).__init__()
+                self.conv1 = nn.Conv3d(in_channels, in_channels, kernel_size=kw, stride=1, padding=padw)
+                self.conv2 = nn.Conv3d(in_channels, out_channels, kernel_size=kw, stride=1, padding=padw)
+                self.leaky = nn.LeakyReLU(0.2)
+
+            def forward(self, x):
+                x = self.leaky(self.conv1(x))
+                x = self.leaky(self.conv2(x))
+                return x
+
+        self.initial_block = nn.Sequential(
+            nn.Conv3d(input_nc, ndf, kernel_size=1),
+            ConvBlock(ndf, ndf * 2)
+        )
+        initial_output_layer = nn.Conv3d(ndf * 2, 1, kernel_size=kw, stride=1, padding=padw)
+        self.prog_blocks, self.output_layers = nn.ModuleList([]), nn.ModuleList([initial_output_layer])
+        self.avg_pool = nn.AvgPool3d(kernel_size=2, stride=2)
+
+        nf = ndf * 2
+        nf_prev = ndf
+        for _ in range(1, n_layers_end):
+            nf_prev = nf
+            nf = min(nf * 2, 512)
+            self.prog_blocks.append(ConvBlock(nf_prev, nf))
+            self.output_layers.append(nn.Conv3d(nf, 1, kernel_size=kw, stride=1, padding=padw))
+
+    def batch_processed(self, batch_size):
+        self.data_till_new_layer -= batch_size
+        if self.data_till_new_layer <= 0:
+            self.n_layers = min(self.n_layers + 1, self.n_layers_end)
+            self.data_till_new_layer = self.data_per_new_layer
+            self.alpha = self.alpha_start
+        else:
+            self.alpha = min(self.alpha + self.alpha_delta, 1)
+
+    def fade_in(self, previous_output, faded_output):
+        return self.alpha * faded_output + (1 - self.alpha) * previous_output
+
+    def forward(self, x):
+        x = self.initial_block(x)
+
+        if self.n_layers <= 1:
+            return self.output_layers[0](x)
+
+        i, down = 0, 0 # just to avoid LSP errors
+        for i in range(self.n_layers - 1):
+            down = self.avg_pool(x)
+            x = self.prog_blocks[i](down)
+
+        down_output = self.output_layers[i](down)
+        x_output = self.output_layers[i+1](x)
+        return self.fade_in(down_output, x_output)
 
 
 class NLayerDiscriminator(nn.Module):

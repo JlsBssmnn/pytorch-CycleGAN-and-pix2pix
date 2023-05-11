@@ -3,7 +3,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from models.networks_3d import ResnetGenerator, UnetGenerator, NLayerDiscriminator
+from models.networks_3d import ResnetGenerator, UnetGenerator, NLayerDiscriminator, ProgressiveDiscriminator
 from models.custom_transforms import Scaler
 
 class Resnet9Blocks3dTest(unittest.TestCase):
@@ -171,3 +171,123 @@ class ScalerTest(unittest.TestCase):
         converted = scaler(image)
 
         torch.testing.assert_close(converted, image * 255)
+
+
+class ProgressiveDiscriminatorTest(unittest.TestCase):
+    def test_module_list_len(self):
+        disc = ProgressiveDiscriminator(1, 1, 5, 10, 0.5)
+        self.assertEqual(len(disc.prog_blocks), 4)
+        self.assertEqual(len(disc.output_layers), 5)
+
+        disc = ProgressiveDiscriminator(1, 2, 7, 10, 0.5)
+        self.assertEqual(len(disc.prog_blocks), 6)
+        self.assertEqual(len(disc.output_layers), 7)
+
+        disc = ProgressiveDiscriminator(2, 1, 4, 100, 0.2)
+        self.assertEqual(len(disc.prog_blocks), 3)
+        self.assertEqual(len(disc.output_layers), 4)
+
+    def test_growing(self):
+        disc = ProgressiveDiscriminator(1, 1, 5, 10, 0.5)
+
+        self.assertEqual(disc.n_layers, 1)
+        self.assertEqual(disc.alpha, 1)
+        self.assertEqual(disc.data_till_new_layer, 5)
+
+        disc.batch_processed(1)
+        self.assertEqual(disc.n_layers, 1)
+        self.assertEqual(disc.alpha, 1)
+        self.assertEqual(disc.data_till_new_layer, 4)
+
+        for i in range(3):
+            disc.batch_processed(1)
+            self.assertEqual(disc.data_till_new_layer, 3-i)
+
+        disc.batch_processed(1)
+        self.assertEqual(disc.n_layers, 2)
+        self.assertEqual(disc.alpha, 1e-5)
+        self.assertEqual(disc.data_till_new_layer, 10)
+
+        disc.batch_processed(1)
+        self.assertAlmostEqual(disc.alpha, 1e-5 + 0.2)
+        disc.batch_processed(1)
+        self.assertAlmostEqual(disc.alpha, 1e-5 + 0.4)
+        disc.batch_processed(1)
+        self.assertAlmostEqual(disc.alpha, 1e-5 + 0.6)
+        disc.batch_processed(1)
+        self.assertAlmostEqual(disc.alpha, 1e-5 + 0.8)
+        disc.batch_processed(1)
+        self.assertAlmostEqual(disc.alpha, 1)
+        disc.batch_processed(1)
+        self.assertAlmostEqual(disc.alpha, 1)
+
+        for _ in range(4):
+            disc.batch_processed(1)
+
+        self.assertEqual(disc.n_layers, 3)
+        self.assertEqual(disc.alpha, 1e-5)
+        self.assertEqual(disc.data_till_new_layer, 10)
+
+    def test_forward(self):
+        # This method tests which blocks of the discriminator were
+        # called during a forward pass. This is done via pytorch hooks.
+        disc = ProgressiveDiscriminator(1, 1, 5, 10, 0.5)
+
+        prog_block_called = torch.Tensor([False] * len(disc.prog_blocks))
+        out_layer_called = torch.Tensor([False] * len(disc.output_layers))
+
+        def register_block(i):
+            def hook(module, input, output):
+                prog_block_called[i] = True
+            disc.prog_blocks[i].register_forward_hook(hook)
+
+        def register_out(i):
+            def hook(module, input, output):
+                out_layer_called[i] = True
+            disc.output_layers[i].register_forward_hook(hook)
+
+        for i in range(len(disc.prog_blocks)):
+            register_block(i)
+        for i in range(len(disc.output_layers)):
+            register_out(i)
+
+        def clear_calls():
+            prog_block_called[:] = False
+            out_layer_called[:] = False
+
+        def assert_block_called_until(n):
+            if n < 0:
+                self.assertFalse(any(prog_block_called))
+                return
+            self.assertTrue(all(prog_block_called[:n+1]))
+            self.assertFalse(any(prog_block_called[n+1:]))
+
+        def assert_only_outs_called(*indices):
+            self.assertTrue(all(out_layer_called[list(indices)]))
+            false_incides = list(set(range(len(out_layer_called))) - set(indices))
+            self.assertFalse(any(out_layer_called[false_incides]))
+
+        disc(torch.rand((1, 1, 32, 64, 64)))
+        assert_block_called_until(-1)
+        assert_only_outs_called(0)
+        clear_calls()
+
+        disc.n_layers = 2
+
+        disc(torch.rand((1, 1, 32, 64, 64)))
+        assert_block_called_until(0)
+        assert_only_outs_called(0, 1)
+        clear_calls()
+
+        disc.n_layers = 3
+
+        disc(torch.rand((1, 1, 32, 64, 64)))
+        assert_block_called_until(1)
+        assert_only_outs_called(1, 2)
+        clear_calls()
+
+        disc.n_layers = 5
+
+        disc(torch.rand((1, 1, 32, 64, 64)))
+        assert_block_called_until(3)
+        assert_only_outs_called(3, 4)

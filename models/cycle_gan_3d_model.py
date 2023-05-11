@@ -153,6 +153,11 @@ class CycleGAN3dModel(BaseModel):
         self.fake_A = self.post_transform_B(self.raw_fake_A)  # G_B(B)
         self.rec_B = self.generator_output_f(self.netG_A(self.fake_A))   # G_A(G_B(B))
 
+    def batch_processed(self, batch_size):
+        if self.opt.netD == 'progressive':
+            self.netD_A.module.batch_processed(batch_size)
+            self.netD_B.module.batch_processed(batch_size)
+
     def backward_D_basic(self, netD, real, fake, synthetic_fake=None):
         """Calculate GAN loss for the discriminator
 
