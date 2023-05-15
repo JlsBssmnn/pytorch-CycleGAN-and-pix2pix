@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn import init
-import torchvision
 import functools
 from torch.optim import lr_scheduler
-from models.custom_transforms import RandomDiscreteRotation, RandomFlip, RandomPixelModifier, RandomGaussianNoise
 from util.logging_config import logging
 from pytorch_3dunet.pytorch3dunet.unet3d.model import UNet3D, ResidualUNet3D, ResidualUNetSE3D, AbstractUNet
 
@@ -175,9 +173,9 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'ResidualUNet3D':
         net = ResidualUNet3D(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     elif netG == 'ResidualUNetSE3D':
-        netG = ResidualUNetSE3D(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
+        net = ResidualUNetSE3D(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     elif netG == 'AbstractUNet':
-        netG = AbstractUNet(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
+        net = AbstractUNet(input_nc, output_nc, use_dropout=use_dropout, **kwargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -499,7 +497,7 @@ class UnetSkipConnectionBlock(nn.Module):
 
     def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False,
         innermost=False, norm_layer=nn.BatchNorm3d, use_dropout=False, unet_1x2x2_kernel_scale=False,
-        unet_extra_xy_conv=False):
+        unet_extra_xy_conv=False, last_activation='tanh'):
         """Construct a Unet submodule with skip connections.
 
         Parameters:
@@ -513,6 +511,7 @@ class UnetSkipConnectionBlock(nn.Module):
             use_dropout (bool)  -- if use dropout layers.
             unet_1x2x2_kernel_scale (bool) -- if true, use a (2, 4, 4) kernel (good for images that are larger in x-and y dimension)
             unet_extra_xy_conv (bool) -- if true, innermost layer reduces only size of x-and y dimension
+            last_activation -- the activation function that is applied at the end of the outermost block
         """
         super(UnetSkipConnectionBlock, self).__init__()
         self.outermost = outermost
@@ -546,7 +545,13 @@ class UnetSkipConnectionBlock(nn.Module):
                                         kernel_size=kernel_size, stride=2,
                                         padding=padding)
             down = [downconv]
-            up = [uprelu, upconv, nn.Tanh()]
+            if last_activation == 'tanh':
+                activation = nn.Tanh()
+            elif last_activation == 'sigmoid':
+                activation = nn.Sigmoid()
+            else:
+                raise NotImplementedError(f'Activation function {last_activation} is not implemented')
+            up = [uprelu, upconv, activation]
             model = down + [submodule] + up
         elif innermost:
             if unet_extra_xy_conv:
@@ -673,7 +678,7 @@ class NLayerDiscriminator(nn.Module):
     """Defines a PatchGAN discriminator"""
 
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm3d, disc_1x2x2_kernel_scale=False,
-        disc_extra_xy_conv=False, disc_no_decrease_last_layers=False):
+        disc_extra_xy_conv=False, disc_no_decrease_last_layers=False, last_activation=None):
         """Construct a PatchGAN discriminator
 
         Parameters:
@@ -684,6 +689,7 @@ class NLayerDiscriminator(nn.Module):
             disc_1x2x2_kernel_scale -- sets the kernel size to (2, 4, 4) and padding to (0, 1, 1)
             disc_extra_xy_conv -- the last reducing conv layer will only reduce the size along the x-and y-dimensions
             disc_no_decrease_last_layers -- the last 2 conv layers will not change the size of the output
+            last_activation -- an activation function that is applied at the end of the forward pass
         """
         super(NLayerDiscriminator, self).__init__()
         if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm3d has affine parameters
@@ -747,6 +753,13 @@ class NLayerDiscriminator(nn.Module):
             ]
 
             sequence += [nn.Conv3d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
+        if last_activation == 'tanh':
+            sequence += [nn.Tanh()]
+        elif last_activation == 'sigmoid':
+            sequence += [nn.Sigmoid()]
+        elif last_activation is not None:
+            raise NotImplementedError(f'Activation {last_activation} is not implemented')
+
         self.model = nn.Sequential(*sequence)
 
     def forward(self, input):
