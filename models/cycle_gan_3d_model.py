@@ -21,6 +21,7 @@ from models import custom_transforms
 from models.custom_transforms import create_transform
 from util.image_pool import ImagePool
 from util.my_utils import object_to_dict
+from util.Evaluater import EpithelialEvaluater
 from .base_model import BaseModel
 from . import networks_3d
 
@@ -42,6 +43,7 @@ class CycleGAN3dModel(BaseModel):
         parser.add_argument('--unet_1x2x2_kernel_scale', action='store_true', default=False, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for setting kernel size)')
         parser.add_argument('--unet_extra_xy_conv', action='store_true', default=False, help='If using certain unets, this parameter is passed to the skip blocks of the unet (for adding an extra conv layer)')
         if is_train:
+            parser.add_argument('eval_freq', type=int, default=100, help='How often the evaluation shall be computed')
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
@@ -69,6 +71,8 @@ class CycleGAN3dModel(BaseModel):
         - define loss function, visualization images, model names, and optimizers
         """
         BaseModel.__init__(self, opt)  # call the initialization method of BaseModel
+        self.evaluater = EpithelialEvaluater(opt) if opt.evaluation_config is not None else None
+
         assert opt.dataset_mode == 'unaligned_3d'
         self.loss_names = ['D_A', 'G_A', 'cycle_A', 'D_B', 'G_B', 'cycle_B']
         # specify the images you want to save and display.
@@ -134,6 +138,12 @@ class CycleGAN3dModel(BaseModel):
                                                 lr=opt.lr_D, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
+
+    def get_current_losses(self, eval_model):
+        if self.evaluater is None or not eval_model:
+            return super().get_current_losses(False)
+        else:
+            return super().get_current_losses(False) | self.evaluater.compute_evaluation(self.netG_A)
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
