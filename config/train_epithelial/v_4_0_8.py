@@ -24,7 +24,7 @@ class EvaluationConfig:
     image_names = ['slice1', 'slice2', 'slice3']
     input_file = './datasets/epithelial_sheet/trainA/real_image.h5'
     input_dataset = 'image'
-    image_slices = [':, 30:62, 1034:1546, 1031:1543', ':, 38:70, 1941:2453, 54:566', ':, 59:91, 35:547, 2029:2541']
+    image_slices = [':, 23:55, 1034:1546, 1031:1543', ':, 31:63, 1941:2453, 54:566', ':, 52:84, 35:547, 2029:2541']
     patch_size = (32, 64, 64)
     generator_config = GeneratorConfig()
     use_gpu = True
