@@ -34,7 +34,7 @@ class EpithelialEvaluater:
                 self.images.append(image)
         self.image_names = config.evaluation_config.image_names
         self.evaluater = Evaluater(self.config, False)
-        self.net_out_transform = Scaler(config.generator_output_range[0], config.generator_output_range[1], 0, 255)
+        self.net_out_transform = Scaler(config.generator_output_range[0], config.generator_output_range[1], 0, 1)
 
         logging.info("Epithelial evaluater created")
 
@@ -42,7 +42,7 @@ class EpithelialEvaluater:
         outputs = []
         for image in self.images:
             output = apply_generator(image, generator, self.config)
-            output = self.net_out_transform(torch.from_numpy(output)).numpy().astype(np.uint8)
+            output = self.net_out_transform(torch.from_numpy(output)).numpy()
             outputs.append(output)
         self.evaluater.clear()
         self.evaluater.find_segmentation_and_eval(outputs)
@@ -56,6 +56,8 @@ class EpithelialEvaluater:
                     scores[image_name + "_VI"].append(eval_scores[image_name]["variation_of_information"])
                 if "score" in eval_scores[image_name]:
                     scores[image_name + "_score"].append(eval_scores[image_name]["score"])
+                if "diff" in eval_scores[image_name]:
+                    scores[image_name + "_diff"].append(eval_scores[image_name]["diff"])
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Mean of empty slice")
