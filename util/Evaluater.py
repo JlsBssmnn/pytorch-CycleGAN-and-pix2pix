@@ -1,11 +1,13 @@
 import warnings
 from models.custom_transforms import Scaler
 import numpy as np
+import pandas as pd
 import torch
 import h5py
 import sys
 import pathlib
 from collections import defaultdict
+from pathlib import Path
 from util.logging_config import logging
 
 class EpithelialEvaluater:
@@ -36,6 +38,9 @@ class EpithelialEvaluater:
         self.evaluater = Evaluater(self.config, False)
         self.net_out_transform = Scaler(config.generator_output_range[0], config.generator_output_range[1], 0, 1)
 
+        self.threshold_file = Path(config.checkpoints_dir) / config.name / 'thresholds.csv'
+        self.thresholds = pd.DataFrame(columns=['membrane', 'cell'])
+
         logging.info("Epithelial evaluater created")
 
     def compute_evaluation(self, generator):
@@ -58,6 +63,15 @@ class EpithelialEvaluater:
                     scores[image_name + "_score"].append(eval_scores[image_name]["score"])
                 if "diff" in eval_scores[image_name]:
                     scores[image_name + "_diff"].append(eval_scores[image_name]["diff"])
+
+        new_thresholds = pd.DataFrame({
+            'cell': list(map(lambda x: x['segmentation_parameters']['basin_threshold'],
+                             self.evaluater.results["evaluation"])),
+            'membrane': list(map(lambda x: x['segmentation_parameters']['membrane_threshold'],
+                             self.evaluater.results["evaluation"])),
+        })
+        self.thresholds = pd.concat((self.thresholds, new_thresholds))
+        self.thresholds.to_csv(self.threshold_file, index=False)
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Mean of empty slice")
