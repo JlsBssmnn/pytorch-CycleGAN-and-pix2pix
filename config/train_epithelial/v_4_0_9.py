@@ -24,15 +24,15 @@ class EvaluationConfig:
     image_names = ['slice1', 'slice2', 'slice3']
     input_file = './datasets/epithelial_sheet/trainA/real_image.h5'
     input_dataset = 'image'
-    image_slices = [':, 30:62, 1034:1546, 1031:1543', ':, 38:70, 1941:2453, 54:566', ':, 59:91, 35:547, 2029:2541']
+    image_slices = [':, 23:55, 1034:1546, 1031:1543', ':, 31:63, 1941:2453, 54:566', ':, 52:84, 35:547, 2029:2541']
     patch_size = (32, 64, 64)
     generator_config = GeneratorConfig()
     use_gpu = True
     
     stride = (16, 32, 32)
     batch_size = 128
-    basins_range = (0, 150, 5)
-    membrane_range = (100, 256, 25)
+    basins_range = (0, 40, 10)
+    membrane_range = (100, 256, 50)
     error_factor = 1/2
     show_progress = False
     local_error_measure = 'acc'
@@ -81,7 +81,7 @@ class Config:
     epoch = 'latest'
     epoch_count = 1
     evaluation_config = EvaluationConfig()
-    eval_freq = 2_496
+    eval_freq = 504
     gan_mode = 'lsgan'
     generator_config = GeneratorConfig()
     generator_output_range = (-1, 1)
