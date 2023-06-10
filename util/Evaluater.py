@@ -48,19 +48,18 @@ class EpithelialEvaluater:
         self.evaluater.find_segmentation_and_eval(outputs)
 
         scores = defaultdict(lambda: [])
-        for evaluation in reversed(self.evaluater.results["evaluation"]):
-            for image_name in sorted(set(self.image_names) -
-                                     set([evaluation["segmentation_parameters"]["tweak_image"]])):
-                eval_scores = evaluation["evaluation_scores"]
+        for evaluation in self.evaluater.results["evaluation"]:
+            tweak_image = evaluation["segmentation_parameters"]["tweak_image"]
+            eval_scores = evaluation["evaluation_scores"]
+            for image_name in [x for x in self.image_names if x != tweak_image]:
                 if "variation_of_information" in eval_scores[image_name]:
                     scores[image_name + "_VI"].append(eval_scores[image_name]["variation_of_information"])
                 if "score" in eval_scores[image_name]:
                     scores[image_name + "_score"].append(eval_scores[image_name]["score"])
-                if "diff" in eval_scores[image_name]:
-                    scores[image_name + "_diff"].append(eval_scores[image_name]["diff"])
+            scores[tweak_image + "_diff"].append(eval_scores[tweak_image]["diff"])
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Mean of empty slice")
             for image_name, score_values in scores.items():
                 scores[image_name] = np.nanmean(score_values)
-        return scores
+        return dict(sorted(scores.items()))
