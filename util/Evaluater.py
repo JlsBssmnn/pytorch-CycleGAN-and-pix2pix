@@ -40,10 +40,12 @@ class EpithelialEvaluater:
 
     def compute_evaluation(self, generator):
         outputs = []
+        generator.eval()
         for image in self.images:
             output = apply_generator(image, generator, self.config)
             output = self.net_out_transform(torch.from_numpy(output)).numpy()
             outputs.append(output)
+        generator.train()
         self.evaluater.clear()
         self.evaluater.find_segmentation_and_eval(outputs)
 
