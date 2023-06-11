@@ -19,17 +19,13 @@ See training and test tips at: https://github.com/junyanz/pytorch-CycleGAN-and-p
 See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md
 """
 import time
-import sys
-import importlib
-from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.get_options import get_training_options
 from util.visualizer import Visualizer
 from util.logging_config import logging
 
-if __name__ == '__main__':
-    opt = get_training_options()
+def main(opt, test=False):
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     logging.info('The number of training images = %d' % dataset_size)
@@ -74,6 +70,8 @@ if __name__ == '__main__':
 
             model.batch_processed(opt.batch_size)
             iter_data_time = time.time()
+            if test:
+                break
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             logging.info('saving the model at the end of epoch %d, iters %d', epoch, total_iters)
             model.save_networks('latest')
@@ -81,4 +79,10 @@ if __name__ == '__main__':
 
         model.update_learning_rate()    # update learning rates at the end of every epoch.
         logging.info('End of epoch %d / %d \t Time Taken: %d sec', epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time)
+        if test:
+            break
     logging.info('Training complete')
+
+if __name__ == '__main__':
+    opt, test = get_training_options()
+    main(opt, test)
