@@ -41,8 +41,8 @@ class EvaluationConfig:
     
     stride = (16, 32, 32)
     batch_size = 256
-    basins_range = (0, 40, 10)
-    membrane_range = (100, 256, 50)
+    basins_range = (10, 11, 1)
+    membrane_range = (225, 226, 1)
     error_factor = 1/2
     show_progress = False
     local_error_measure = 'acc'
@@ -91,7 +91,7 @@ class Config:
     epoch = 'latest'
     epoch_count = 1
     evaluation_config = EvaluationConfig()
-    eval_freq = 1_024
+    eval_freq = 2_048
     gan_mode = 'lsgan'
     generator_config = CycleGANGeneratorConfig()
     generator_output_range = (-1, 1)
