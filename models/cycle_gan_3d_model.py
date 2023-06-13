@@ -71,7 +71,7 @@ class CycleGAN3dModel(BaseModel):
         - define loss function, visualization images, model names, and optimizers
         """
         BaseModel.__init__(self, opt)  # call the initialization method of BaseModel
-        self.evaluater = EpithelialEvaluater(opt) if opt.evaluation_config is not None else None
+        self.evaluater = EpithelialEvaluater(opt, **opt.eval_params) if opt.evaluation_config is not None else None
 
         assert opt.dataset_mode == 'unaligned_3d'
         self.loss_names = ['D_A', 'G_A', 'cycle_A', 'D_B', 'G_B', 'cycle_B']

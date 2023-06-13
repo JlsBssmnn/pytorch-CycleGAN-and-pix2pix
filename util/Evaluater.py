@@ -9,7 +9,7 @@ from collections import defaultdict
 from util.logging_config import logging
 
 class EpithelialEvaluater:
-    def __init__(self, config):
+    def __init__(self, config, compute_VI=True):
         sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
         global apply_generator, Evaluater
         from evaluation.translate_image import GeneratorApplier
@@ -47,9 +47,28 @@ class EpithelialEvaluater:
         self.evaluater = Evaluater(self.config, False)
         self.net_out_transform = Scaler(config.generator_output_range[0], config.generator_output_range[1], 0, 1)
 
+        if compute_VI:
+            self.compute_evaluation = self.compute_evaluation_with_VI
+        else:
+            self.compute_evaluation = self.compute_evaluation_without_VI
+
         logging.info("Epithelial evaluater created")
 
-    def compute_evaluation(self, generator):
+    def compute_evaluation_without_VI(self, generator):
+        scores = {}
+        generator.eval()
+
+        for i, image in enumerate(self.images):
+            output = self.generator_applier.apply_generator(image, generator)
+            output = self.net_out_transform(torch.from_numpy(output)).numpy()
+            output = eval(f'output[{self.config.slice_str}]')
+            diff = self.evaluater.compute_diff(output, i)
+            scores[self.image_names[i] + "_diff"] = diff
+
+        generator.train()
+        return scores
+
+    def compute_evaluation_with_VI(self, generator):
         outputs = []
         generator.eval()
         for image in self.images:
