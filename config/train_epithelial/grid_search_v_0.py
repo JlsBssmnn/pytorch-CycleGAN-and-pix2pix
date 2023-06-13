@@ -91,7 +91,8 @@ class Config:
     epoch = 'latest'
     epoch_count = 1
     evaluation_config = EvaluationConfig()
-    eval_freq = 2_048
+    eval_freq = 1_024
+    eval_params = {'compute_VI': False}
     gan_mode = 'lsgan'
     generator_config = CycleGANGeneratorConfig()
     generator_output_range = (-1, 1)
