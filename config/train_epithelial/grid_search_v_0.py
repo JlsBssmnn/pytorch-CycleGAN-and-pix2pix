@@ -113,8 +113,8 @@ class Config:
     lr_policy = 'linear'
     max_dataset_size = float('inf')
     model = 'cycle_gan_3d'
-    n_epochs = 50
-    n_epochs_decay = 50
+    n_epochs = 35
+    n_epochs_decay = 35
     n_layers_D = 3
     name = 'epithelial_sheets_grid_search_0'
     ndf = 64
