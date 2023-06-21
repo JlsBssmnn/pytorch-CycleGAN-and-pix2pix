@@ -21,7 +21,7 @@ from models import custom_transforms
 from models.custom_transforms import create_transform
 from util.image_pool import ImagePool
 from util.my_utils import object_to_dict
-from util.Evaluater import EpithelialEvaluater
+from util.Evaluater import BrainbowEvaluater, EpithelialEvaluater
 from .base_model import BaseModel
 from . import networks_3d
 
@@ -71,7 +71,14 @@ class CycleGAN3dModel(BaseModel):
         - define loss function, visualization images, model names, and optimizers
         """
         BaseModel.__init__(self, opt)  # call the initialization method of BaseModel
-        self.evaluater = EpithelialEvaluater(opt, **opt.eval_params) if opt.evaluation_config is not None else None
+        if opt.evaluation_config is None:
+            self.evaluater = None
+        elif 'epithelial_sheet' in opt.dataroot:
+            self.evaluater = EpithelialEvaluater(opt)
+        elif 'brainbows' in opt.dataroot:
+            self.evaluater = BrainbowEvaluater(opt)
+        else:
+            raise NotImplementedError(f"For a dataroot {opt.dataroot}, there is no evaluater!")
 
         assert opt.dataset_mode == 'unaligned_3d'
         self.loss_names = ['D_A', 'G_A', 'cycle_A', 'D_B', 'G_B', 'cycle_B']
