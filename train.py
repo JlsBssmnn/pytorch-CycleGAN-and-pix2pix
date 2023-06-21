@@ -34,6 +34,7 @@ def main(opt, test=False):
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
+    t_data = None
 
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
@@ -56,8 +57,7 @@ def main(opt, test=False):
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result, total_iters)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
-                eval_model = total_iters % opt.eval_freq == 0
-                losses = model.get_current_losses(eval_model)
+                losses = model.get_current_losses(total_iters)
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
                 visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data)
                 if opt.display_id > 0:

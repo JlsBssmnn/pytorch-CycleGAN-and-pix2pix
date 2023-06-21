@@ -140,8 +140,8 @@ class BaseModel(ABC):
                 visual_ret[name] = getattr(self, name)
         return visual_ret
 
-    def get_current_losses(self, eval_model):
-        """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
+    def get_current_losses(self, total_iters):
+        """Return training losses / errors. train.py will print out these errors on console, and save them to a file"""
         errors_ret = OrderedDict()
         for name in self.loss_names:
             if isinstance(name, str):

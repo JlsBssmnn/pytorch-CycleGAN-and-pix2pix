@@ -139,11 +139,10 @@ class CycleGAN3dModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
-    def get_current_losses(self, eval_model):
-        if self.evaluater is None or not eval_model:
-            return super().get_current_losses(False)
-        else:
-            return super().get_current_losses(False) | self.evaluater.compute_evaluation(self.netG_A)
+    def get_current_losses(self, total_iters):
+        if self.evaluater is None:
+            return super().get_current_losses(total_iters)
+        return super().get_current_losses(total_iters) | self.evaluater.compute_evaluation(self.netG_A, total_iters)
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.

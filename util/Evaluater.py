@@ -9,11 +9,11 @@ from collections import defaultdict
 from util.logging_config import logging
 
 class EpithelialEvaluater:
-    def __init__(self, config, compute_VI=True):
+    def __init__(self, config):
         sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
         global apply_generator, Evaluater
         from evaluation.translate_image import GeneratorApplier
-        from evaluation.evaluate_image import Evaluater
+        from evaluation.evaluate_epithelial import SEEpithelial
 
         self.config = config.evaluation_config
 
@@ -44,15 +44,18 @@ class EpithelialEvaluater:
 
         self.image_names = config.evaluation_config.image_names
         self.generator_applier = GeneratorApplier(self.images[0].shape, self.config)
-        self.evaluater = Evaluater(self.config, False)
+        self.evaluater = SEEpithelial(self.config, False)
         self.net_out_transform = Scaler(config.generator_output_range[0], config.generator_output_range[1], 0, 1)
 
-        if compute_VI:
-            self.compute_evaluation = self.compute_evaluation_with_VI
-        else:
-            self.compute_evaluation = self.compute_evaluation_without_VI
-
         logging.info("Epithelial evaluater created")
+
+    def compute_evaluation(self, generator, total_iters):
+        if total_iters % self.config.eval_freq != 0:
+            return {}
+        elif total_iters % self.config.vi_freq != 0:
+            return self.compute_evaluation_without_VI(generator)
+        else:
+            return self.compute_evaluation_with_VI(generator)
 
     def compute_evaluation_without_VI(self, generator):
         scores = {}
