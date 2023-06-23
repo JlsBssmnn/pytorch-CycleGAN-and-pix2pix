@@ -89,10 +89,16 @@ class CycleGAN3dModel(BaseModel):
             visual_names_A += ['raw_fake_B']
         if opt.post_transforms_B is not None:
             visual_names_B += ['raw_fake_A']
+
         if self.isTrain and self.opt.lambda_identity > 0.0:  # if identity loss is used, we also visualize idt_B=G_A(B) ad idt_A=G_A(B)
             visual_names_A.append('idt_B')
             visual_names_B.append('idt_A')
             self.loss_names += ['idt_A', 'idt_B']
+
+        if opt.datasetA_creation_func is not None:
+            visual_names_A.append('original_A')
+        if opt.datasetB_creation_func is not None:
+            visual_names_B.append('original_B')
         self.visual_names = visual_names_A + visual_names_B
 
         # specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks to save and load networks.
@@ -161,6 +167,11 @@ class CycleGAN3dModel(BaseModel):
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_index = input['A_image' if AtoB else 'B_image']
+
+        if 'original_A' in input:
+            self.original_A = input['original_A']
+        if 'original_B' in input:
+            self.original_B = input['original_B']
 
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""

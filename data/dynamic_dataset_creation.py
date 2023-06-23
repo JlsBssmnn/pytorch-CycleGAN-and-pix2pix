@@ -80,3 +80,11 @@ def create_brainbow_affinities(image, offsets, bg_measure, bg_threshold, dist_me
 
         affinities[i + 1] = values
     return affinities
+
+def synth_brainbow_to_affinities(image, offsets):
+    """
+    This function converts a colored brainbow image that has been synthetically generated to the affinity
+    representation. Note that the special property of these images is that the color of one neuron is always constant,
+    meaning the color value doesn't change across the neuron at all. Also the background are only voxel with value zero.
+    """
+    return create_brainbow_affinities(image, offsets, 'min', 1e-10, 'norm', 0)

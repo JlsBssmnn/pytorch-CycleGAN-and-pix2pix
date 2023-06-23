@@ -51,9 +51,12 @@ class Unaligned3dDataset(BaseDataset):
         parser.add_argument('--dataset_length', type=str, default='max', choices=['min', 'max'], help='How to determine the size of the entire dataset given the sizes of dataset A and dataset B')
         parser.add_argument('--no_normalization', action='store_true', help='If specified the samples are not normalized')
         parser.add_argument('--dataset_stride', type=int, nargs=3, default=None, help='The stride of the kernel that moves thorugh the data array to sample inputs')
-        parser.add_argument('--augmentation_transforms', action=StoreDictKeyPair, default=None, nargs="+",
-                            metavar="KEY=VAL", help='Transformations that are applied to the sampled patches.')
-        parser.add_argument('--colorize', action='store_true', help='If true, grayscale images will be converted to 3-channel color images')
+        parser.add_argument('--dataset_transforms_A', action=StoreDictKeyPair, default=None, nargs="+",
+                            metavar="KEY=VAL", help='Transformations that are applied to the sampled patches from dataset A.')
+        parser.add_argument('--dataset_transforms_B', action=StoreDictKeyPair, default=None, nargs="+",
+                            metavar="KEY=VAL", help='Transformations that are applied to the sampled patches from dataset B.')
+        parser.add_argument('--datasetA_creation_func', type=object, default=None, help='A function that is applied to the loaded data of dataset A')
+        parser.add_argument('--datasetB_creation_func', type=object, default=None, help='A function that is applied to the loaded data of dataset B')
 
         return parser
 
@@ -95,6 +98,15 @@ class Unaligned3dDataset(BaseDataset):
         offset_slicing_B = tuple([slice(offset, -offset if offset > 0 else None) for offset in opt.border_offset_B])
         self.A_images = [arr[(slice(None),) + offset_slicing_A] for arr in self.A_images]
         self.B_images = [arr[(slice(None),) + offset_slicing_B] for arr in self.B_images]
+
+        self.original_A_images = self.original_B_images = None
+
+        if opt.datasetA_creation_func is not None:
+            self.original_A_images = self.A_images
+            self.A_images = [opt.datasetA_creation_func(x) for x in self.A_images]
+        if opt.datasetB_creation_func is not None:
+            self.original_B_images = self.B_images
+            self.B_images = [opt.datasetB_creation_func(x) for x in self.B_images]
 
         if opt.datasetA_mask:
             assert len(self.A_images) == 1
@@ -229,12 +241,22 @@ class Unaligned3dDataset(BaseDataset):
         A_shape = self.sample_count_per_axis_A[A_image_index]
         B_shape = self.sample_count_per_axis_B[B_image_index]
 
-        A_img = self.A_images[A_image_index][(slice(None),) + self.get_nth_sample(A_shape, A_index_in_image)]
-        B_img = self.B_images[B_image_index][(slice(None),) + self.get_nth_sample(B_shape, B_index_in_image)]
+        A_slice = (slice(None),) + self.get_nth_sample(A_shape, A_index_in_image)
+        B_slice = (slice(None),) + self.get_nth_sample(B_shape, B_index_in_image)
+
+        A_img = self.A_images[A_image_index][A_slice]
+        B_img = self.B_images[B_image_index][B_slice]
         A = self.transform_A(A_img)
         B = self.transform_B(B_img)
 
-        return {'A': A, 'B': B, 'A_image': A_image_index,  'B_image': B_image_index}
+        item = {'A': A, 'B': B, 'A_image': A_image_index,  'B_image': B_image_index}
+
+        if self.original_A_images is not None:
+            item |= {'original_A': self.transform_A(self.original_A_images[A_image_index][A_slice])}
+        if self.original_B_images is not None:
+            item |= {'original_B': self.transform_B(self.original_B_images[B_image_index][B_slice])}
+
+        return item
 
     def __len__(self):
         """Return the total number of images."""

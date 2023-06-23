@@ -87,6 +87,9 @@ class Visualizer():
         self.ncols = opt.display_ncols
         self.tanh_to_uint8 = create_transform('tanh_to_uint8')
 
+        self.transform_A = opt.display_transform_A(opt)
+        self.transform_B = opt.display_transform_B(opt)
+
         if opt.dataset_mode == 'unaligned_3d':
             self.display_current_results = self.display_current_results_3d
         else:
@@ -236,10 +239,16 @@ class Visualizer():
                 g = f.create_group(group_name)
 
                 for label, image in visuals.items():
-                    image = self.tanh_to_uint8(image).type(torch.uint8)
-                    image = image.cpu().detach().numpy()
-                    if image.ndim == 5:
-                        image = image[0]
+                    if label.endswith('A'):
+                        label, image = self.transform_A.transform(image, label)
+                    elif label.endswith('B'):
+                        label, image = self.transform_B.transform(image, label)
+                    else:
+                        raise ValueError("Wrong image label")
+
+                    if image is None:
+                        continue
+
                     d = g.create_dataset(label, data=image)
 
                     if self.opt.element_size_um is not None:
