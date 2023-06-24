@@ -111,10 +111,12 @@ class BrainbowEvaluater:
 
         self.images = []
         image_shape = None
-        transform = Scaler(config.input_value_range[0], config.input_value_range[1], -1, 1)
         with h5py.File(self.config.input_file) as f:
+            entire_image = np.asarray(f[self.config.input_dataset])
+            transform = Scaler(0, entire_image.max(), -1, 1)
+
             for s in self.config.image_slices:
-                image = np.asarray(eval(f"f[self.config.input_dataset][{s}]"))
+                image = eval(f"entire_image[{s}]")
                 if image.dtype == np.uint16:
                     image = image.astype(np.float32)
                 image = torch.tensor(image)
@@ -159,6 +161,8 @@ class BrainbowEvaluater:
             for image_name in [x for x in self.image_names if x != tweak_image]:
                 if "variation_of_information" in eval_scores[image_name]:
                     scores[image_name + "_VI"].append(eval_scores[image_name]["variation_of_information"])
+                    scores[image_name + "_under_seg"].append(eval_scores[image_name]["under_segmentation"])
+                    scores[image_name + "_over_seg"].append(eval_scores[image_name]["over_segmentation"])
             scores[tweak_image + "_fg_prec"].append(eval_scores[tweak_image]["foreground_prec"])
             scores[tweak_image + "_fg_rec"].append(eval_scores[tweak_image]["foreground_rec"])
             scores[tweak_image + "_fg_f1"].append(eval_scores[tweak_image]["foreground_f1"])
