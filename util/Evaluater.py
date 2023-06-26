@@ -82,22 +82,8 @@ class EpithelialEvaluater:
         self.evaluater.clear()
         self.evaluater.find_segmentation_and_eval(outputs)
 
-        scores = defaultdict(lambda: [])
-        for evaluation in self.evaluater.results["evaluation"]:
-            tweak_image = evaluation["segmentation_parameters"]["tweak_image"]
-            eval_scores = evaluation["evaluation_scores"]
-            for image_name in [x for x in self.image_names if x != tweak_image]:
-                if "variation_of_information" in eval_scores[image_name]:
-                    scores[image_name + "_VI"].append(eval_scores[image_name]["variation_of_information"])
-                if "score" in eval_scores[image_name]:
-                    scores[image_name + "_score"].append(eval_scores[image_name]["score"])
-            scores[tweak_image + "_diff"].append(eval_scores[tweak_image]["diff"])
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Mean of empty slice")
-            for image_name, score_values in scores.items():
-                scores[image_name] = np.nanmean(score_values)
-        return dict(sorted(scores.items()))
+        return summarize_results(self.evaluater.results, self.image_names,
+                                 [('variation_of_information', 'VI'), 'score'], ['diff'])
 
 
 class BrainbowEvaluater:
@@ -154,24 +140,34 @@ class BrainbowEvaluater:
         self.evaluater.clear()
         self.evaluater.find_segmentation_and_eval(outputs, total_iters % self.config.vi_freq == 0)
 
-        scores = defaultdict(lambda: [])
-        for evaluation in self.evaluater.results["evaluation"]:
-            tweak_image = evaluation["segmentation_parameters"]["tweak_image"]
-            eval_scores = evaluation["evaluation_scores"]
-            for image_name in [x for x in self.image_names if x != tweak_image]:
-                if "variation_of_information" in eval_scores[image_name]:
-                    scores[image_name + "_VI"].append(eval_scores[image_name]["variation_of_information"])
-                    scores[image_name + "_under_seg"].append(eval_scores[image_name]["under_segmentation"])
-                    scores[image_name + "_over_seg"].append(eval_scores[image_name]["over_segmentation"])
-            scores[tweak_image + "_fg_prec"].append(eval_scores[tweak_image]["foreground_prec"])
-            scores[tweak_image + "_fg_rec"].append(eval_scores[tweak_image]["foreground_rec"])
-            scores[tweak_image + "_fg_f1"].append(eval_scores[tweak_image]["foreground_f1"])
-            scores[tweak_image + "_fg_acc"].append(eval_scores[tweak_image]["foreground_acc"])
-            scores[tweak_image + "_fg_diff"].append(eval_scores[tweak_image]["foreground_diff"])
-            scores[tweak_image + "_affinity_diff"].append(eval_scores[tweak_image]["affinity_diff"])
+        return summarize_results(self.evaluater.results, self.image_names,
+             [('variation_of_information', 'VI'), ('under_segmentation', 'under_seg'), ('over_segmentation', 'over_seg')],
+             [('foreground_prec', 'fg_prec'), ('foreground_rec', 'fg_rec'), ('foreground_f1', 'fg_f1'),
+              ('foreground_acc', 'fg_acc'), ('foreground_diff', 'fg_diff'), 'affinity_diff'])
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Mean of empty slice")
-            for image_name, score_values in scores.items():
-                scores[image_name] = np.nanmean(score_values)
-        return dict(sorted(scores.items()))
+
+def summarize_results(results, image_names, aggregate_metrics: list[str | tuple[str, str]],
+                     non_aggregate_metrics: list[str | tuple[str, str]]):
+    """
+    Summarizes and aggregates the `results` property from either the SEEpithelial or SEBrainbow class.
+    """
+    scores = defaultdict(lambda: [])
+    for evaluation in results['evaluation']:
+        tweak_image = evaluation["segmentation_parameters"]["tweak_image"]
+        eval_scores = evaluation["evaluation_scores"]
+        for image_name in [x for x in image_names if x != tweak_image]:
+            for metric in aggregate_metrics:
+                source_name = metric if type(metric) == str else metric[0]
+                target_name = metric if type(metric) == str else metric[1]
+                if source_name in eval_scores[image_name]:
+                    scores[f"{image_name}_{target_name}"].append(eval_scores[image_name][source_name])
+        for metric in non_aggregate_metrics:
+            source_name = metric if type(metric) == str else metric[0]
+            target_name = metric if type(metric) == str else metric[1]
+            scores[f"{tweak_image}_{target_name}"].append(eval_scores[tweak_image][source_name])
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Mean of empty slice")
+        for image_name, score_values in scores.items():
+            scores[image_name] = np.nanmean(score_values)
+    return dict(sorted(scores.items()))
