@@ -169,17 +169,20 @@ class CycleGAN3dModel(BaseModel):
         self.image_index = input['A_image' if AtoB else 'B_image']
 
         if 'original_A' in input:
-            self.original_A = input['original_A']
+            self.original_A = input['original_A'].detach().clone()
         if 'original_B' in input:
-            self.original_B = input['original_B']
+            self.original_B = input['original_B'].detach().clone()
 
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
-        self.raw_fake_B = self.generator_output_f(self.netG_A(self.real_A))
-        self.fake_B = self.post_transform_A(self.raw_fake_B)  # G_A(A)
+        self.fake_B = self.generator_output_f(self.netG_A(self.real_A))
+        self.raw_fake_B = self.fake_B.detach().clone()
+        self.fake_B = self.post_transform_A(self.fake_B)  # G_A(A)
         self.rec_A = self.generator_output_f(self.netG_B(self.fake_B))   # G_B(G_A(A))
-        self.raw_fake_A = self.generator_output_f(self.netG_B(self.real_B))
-        self.fake_A = self.post_transform_B(self.raw_fake_A)  # G_B(B)
+
+        self.fake_A = self.generator_output_f(self.netG_B(self.real_B))
+        self.raw_fake_A = self.fake_A.detach().clone()
+        self.fake_A = self.post_transform_B(self.fake_A)  # G_B(B)
         self.rec_B = self.generator_output_f(self.netG_A(self.fake_A))   # G_A(G_B(B))
 
     def batch_processed(self, batch_size):

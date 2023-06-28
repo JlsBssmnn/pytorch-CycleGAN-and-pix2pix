@@ -25,7 +25,6 @@ class Transform:
 
     def transform_image(self, x):
         inputs = []
-        x = x.detach().clone()
         for t in self.wrapper:
             inputs.append(x)
             x = t.pre(x)
@@ -38,10 +37,9 @@ class Transform:
         if x.ndim == 4:
             return self.transform_image(x)
         elif x.ndim == 5:
-            output = torch.empty(x.shape)
             for i in range(x.shape[0]):
-                output[i] = self.transform_image(x[i])
-            return output
+                x[i] = self.transform_image(x[i])
+            return x
         else:
             raise NotImplementedError('Transform cannot be applied to dimensionality %d' % x.ndim)
 
