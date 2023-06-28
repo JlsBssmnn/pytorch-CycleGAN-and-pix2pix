@@ -1,9 +1,12 @@
 import numpy as np
 import torch
+import skimage
+from torch.utils.tensorboard import SummaryWriter
 import os
 import sys
 import ntpath
 import time
+from collections import defaultdict
 
 from models import networks_3d
 from models.custom_transforms import create_transform
@@ -100,6 +103,9 @@ class Visualizer():
             self.vis = visdom.Visdom(server=opt.display_server, port=opt.display_port, env=opt.display_env)
             if not self.vis.check_connection():
                 self.create_visdom_connections()
+
+        if opt.use_tensorboard:
+            self.tb_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, 'tensorboard'))
 
         if self.use_wandb:
             self.wandb_run = wandb.init(project=self.wandb_project_name, name=opt.name, config=opt) if not wandb.run else wandb.run
@@ -254,6 +260,14 @@ class Visualizer():
                     if self.opt.element_size_um is not None:
                         d.attrs['element_size_um'] = self.opt.element_size_um
 
+                    if self.opt.use_tensorboard:
+                        if image.dtype == np.uint16:
+                            image = (skimage.color.label2rgb(image) * 255).astype(np.uint8)
+                            image = np.rollaxis(image, -1)
+                        video = torch.from_numpy(image)
+                        video = torch.transpose(video, 0, 1)
+                        self.tb_writer.add_video(label, video[None], total_iters, fps=4)
+
     def plot_current_losses(self, epoch, counter_ratio, losses):
         """display the current losses on visdom display: dictionary of error labels and values
 
@@ -282,7 +296,7 @@ class Visualizer():
             self.wandb_run.log(losses)
 
     # losses: same format as |losses| of plot_current_losses
-    def print_current_losses(self, epoch, iters, losses, t_comp, t_data):
+    def print_current_losses(self, epoch, iters, losses, t_comp, t_data, total_iters):
         """print current losses on console; also save the losses to the disk
 
         Parameters:
@@ -299,3 +313,19 @@ class Visualizer():
         logging.info(message)  # print the message
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message
+
+        if self.opt.use_tensorboard:
+            scalars = defaultdict(lambda: dict())
+            for k, v in losses.items():
+                if k.endswith('_A') or k.endswith('_B'):
+                    scalars['losses'][k] = v
+                else:
+                    scalar_type = k[k.index('_') + 1:]
+                    scalars[scalar_type][k] = v
+
+            for k, v in scalars.items():
+                self.tb_writer.add_scalars(k, v, total_iters)
+
+    def close(self):
+        if self.opt.use_tensorboard:
+            self.tb_writer.close()
