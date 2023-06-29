@@ -57,6 +57,8 @@ class Unaligned3dDataset(BaseDataset):
                             metavar="KEY=VAL", help='Transformations that are applied to the sampled patches from dataset B.')
         parser.add_argument('--datasetA_creation_func', type=object, default=None, help='A function that is applied to the loaded data of dataset A')
         parser.add_argument('--datasetB_creation_func', type=object, default=None, help='A function that is applied to the loaded data of dataset B')
+        parser.add_argument('--datasetA_random_sampling', type=bool, default=False, help='If true samples for dataset A are randomly samples from the array')
+        parser.add_argument('--datasetB_random_sampling', type=bool, default=False, help='If true samples for dataset B are randomly samples from the array')
 
         return parser
 
@@ -129,7 +131,10 @@ class Unaligned3dDataset(BaseDataset):
         assert self.samples_per_image_A[-1] > 0 and self.samples_per_image_B[-1] > 0, \
             "One of the datasets is empty (could be due to a mask)"
 
-        if opt.dataset_length == 'min':
+        if opt.datasetA_random_sampling and opt.datasetB_random_sampling:
+            assert opt.max_dataset_size <= float('inf')
+            self.len = opt.max_dataset_size
+        elif opt.dataset_length == 'min':
             self.len = int(min(self.samples_per_image_A[-1], self.samples_per_image_B[-1]))
         elif opt.dataset_length == 'max':
             self.len = int(max(self.samples_per_image_A[-1], self.samples_per_image_B[-1]))
@@ -211,6 +216,47 @@ class Unaligned3dDataset(BaseDataset):
         else:
             return samples_to_skip.peekitem(i)[1]
 
+    def get_item_from_dataset(self, index, dataset: Literal['A', 'B'], serial_batches):
+        if getattr(self.opt, f'dataset{dataset}_random_sampling'):
+            image_index = random.randint(0, len(getattr(self, f'samples_per_image_{dataset}')) - 1)
+            image_shape = getattr(self, f'{dataset}_images')[image_index].shape
+            slice_start = np.random.randint((0, 0, 0), np.array(image_shape[-3:]) - self.opt.sample_size)
+            s = (slice(None),) + tuple([slice(slice_start[i], slice_start[i] + self.opt.sample_size[i]) for i in range(3)])
+
+            mask = getattr(self, f'{dataset}_mask')
+            if mask is not None:
+                while not mask[s[1:]].all():
+                    slice_start = np.random.randint((0, 0, 0), np.array(image_shape[-3:]) - self.opt.sample_size)
+                    s = (slice(None),) + tuple([slice(slice_start[i], slice_start[i] + self.opt.sample_size[i]) for i in range(3)])
+        else:
+            dataset_index = index % getattr(self, f'samples_per_image_{dataset}')[-1]
+
+            if serial_batches:
+                image_index = np.argmax(getattr(self, f'samples_per_image_{dataset}') > dataset_index)
+            else:
+                image_index = random.randint(0, len(getattr(self, f'samples_per_image_{dataset}')) - 1)
+
+            if serial_batches:
+                index_in_image = dataset_index \
+                    - (getattr(self, f'samples_per_image_{dataset}')[image_index-1] if image_index > 0 else 0) \
+                    + self.samples_to_skip(dataset, dataset_index)
+            else:
+                index_in_image = random.randint(0, getattr(self, f'samples_per_image_{dataset}')[image_index] - \
+                    (getattr(self, f'samples_per_image_{dataset}')[image_index - 1] if image_index > 0 else 0) - 1)
+
+            shape = getattr(self, f'sample_count_per_axis_{dataset}')[image_index]
+
+            s = (slice(None),) + self.get_nth_sample(shape, index_in_image)
+
+        img = getattr(self, f'{dataset}_images')[image_index][s]
+        img = getattr(self, f'transform_{dataset}')(img)
+
+        item = {dataset: img, f'{dataset}_image': image_index}
+
+        if getattr(self, f'original_{dataset}_images') is not None:
+            item |= {f'original_{dataset}': getattr(self, f'transform_{dataset}')(getattr(self, f'original_{dataset}_images')[image_index][s])}
+
+        return item
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -222,39 +268,9 @@ class Unaligned3dDataset(BaseDataset):
             a dictionary of data with their names.
         """
         assert index < self.len
-        indexA = index % self.samples_per_image_A[-1]
-        indexB = index % self.samples_per_image_B[-1]
 
-        A_image_index = np.argmax(self.samples_per_image_A > indexA)
-        if self.opt.serial_batches:
-            B_image_index = np.argmax(self.samples_per_image_B > indexB)
-        else:
-            B_image_index = random.randint(0, len(self.samples_per_image_B) - 1)
-
-        A_index_in_image = indexA - (self.samples_per_image_A[A_image_index-1] if A_image_index > 0 else 0) + self.samples_to_skip('A', indexA)
-        if self.opt.serial_batches:
-            B_index_in_image = indexB - (self.samples_per_image_B[B_image_index-1] if B_image_index > 0 else 0) + self.samples_to_skip('B', indexB)
-        else:
-            B_index_in_image = random.randint(0, self.samples_per_image_B[B_image_index] - \
-                (self.samples_per_image_B[B_image_index - 1] if B_image_index > 0 else 0) - 1)
-
-        A_shape = self.sample_count_per_axis_A[A_image_index]
-        B_shape = self.sample_count_per_axis_B[B_image_index]
-
-        A_slice = (slice(None),) + self.get_nth_sample(A_shape, A_index_in_image)
-        B_slice = (slice(None),) + self.get_nth_sample(B_shape, B_index_in_image)
-
-        A_img = self.A_images[A_image_index][A_slice]
-        B_img = self.B_images[B_image_index][B_slice]
-        A = self.transform_A(A_img)
-        B = self.transform_B(B_img)
-
-        item = {'A': A, 'B': B, 'A_image': A_image_index,  'B_image': B_image_index}
-
-        if self.original_A_images is not None:
-            item |= {'original_A': self.transform_A(self.original_A_images[A_image_index][A_slice])}
-        if self.original_B_images is not None:
-            item |= {'original_B': self.transform_B(self.original_B_images[B_image_index][B_slice])}
+        item = self.get_item_from_dataset(index, 'A', True) | \
+               self.get_item_from_dataset(index, 'B', self.opt.serial_batches)
 
         return item
 

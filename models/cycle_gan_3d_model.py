@@ -228,7 +228,7 @@ class CycleGAN3dModel(BaseModel):
             synthetic_fake_B = self.real_fake_trans_A(self.real_B)
         else:
             synthetic_fake_B = None
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.disc_transform_A(self.real_B), fake_B, synthetic_fake_B)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.disc_transform_A(self.real_B.clone()), fake_B, synthetic_fake_B)
 
     def backward_D_B(self):
         """Calculate GAN loss for discriminator D_B"""
@@ -237,7 +237,7 @@ class CycleGAN3dModel(BaseModel):
             synthetic_fake_A = self.real_fake_trans_B(self.real_A)
         else:
             synthetic_fake_A = None
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.disc_transform_B(self.real_A), fake_A, synthetic_fake_A)
+        self.loss_D_B = self.backward_D_basic(self.netD_B, self.disc_transform_B(self.real_A.clone()), fake_A, synthetic_fake_A)
 
     def backward_G(self):
         """Calculate the loss for generators G_A and G_B"""
