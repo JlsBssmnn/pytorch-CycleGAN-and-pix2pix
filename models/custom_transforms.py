@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import torch
+import numpy as np
 import perlin_numpy
 import torchvision
 from torchvision.transforms import functional
@@ -156,6 +156,48 @@ class RandomPerlinNoise:
         else:
             origin_dtype = torch.iinfo(x.dtype)
         return torch.clamp(x + noise, origin_dtype.min, origin_dtype.max).type(x.dtype)
+
+class GaussianBlur:
+    """
+    Apply gaussian blur.
+    Implementation is inspired by https://discuss.pytorch.org/t/is-there-anyway-to-do-gaussian-filtering-for-an-image-2d-3d-in-pytorch/12351/10
+    """
+    def __init__(self, channels, kernel_size, sigma):
+        if type(kernel_size) == int:
+            kernel_size = [kernel_size] * 3
+        if type(sigma) == int or type(sigma) == float:
+            sigma = [sigma] * 3
+
+        assert all([x % 2 == 1 for x in kernel_size])
+
+        # The gaussian kernel is the product of the
+        # gaussian function of each dimension.
+        kernel = 1
+        meshgrids = torch.meshgrid(
+            [
+                torch.arange(size, dtype=torch.float32)
+                for size in kernel_size
+            ]
+        )
+        for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
+            mean = (size - 1) / 2
+            kernel *= 1 / (std * np.sqrt(2 * np.pi)) * \
+                      torch.exp(-((mgrid - mean) / std) ** 2 / 2)
+
+        # Make sure sum of values in gaussian kernel equals 1.
+        kernel = kernel / torch.sum(kernel)
+
+        # Reshape to depthwise convolutional weight
+        kernel = kernel.view(1, 1, *kernel.size())
+        kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+
+        self.kernel = kernel
+        self.groups = channels
+
+    def __call__(self, x):
+        self.kernel = self.kernel.to(x.device)
+        x = torch.nn.functional.conv3d(x.clone(), weight=self.kernel, padding='same', groups=self.groups)
+        return x
 
 class Threshold():
     """
