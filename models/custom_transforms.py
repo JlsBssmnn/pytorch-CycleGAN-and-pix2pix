@@ -1,9 +1,12 @@
+from typing import Any
 import torch
 import numpy as np
 import perlin_numpy
 import torchvision
 from torchvision.transforms import functional
+import skimage
 import random
+import numbers
 
 class Transform:
     """
@@ -105,6 +108,72 @@ class RandomFlip:
             x = functional.vflip(x)
         return x
 
+class RandomCropAndZoom:
+    def __init__(self, crop_ratio, sample_size):
+        if isinstance(crop_ratio, numbers.Number):
+            self.crop_ratio = [crop_ratio]*2
+        else:
+            self.crop_ratio = crop_ratio
+
+        crop_shape = torch.tensor(sample_size[-2:]) / torch.tensor(self.crop_ratio)
+        shape = sample_size[-2:]
+        self.crop = torchvision.transforms.RandomCrop(crop_shape.type(torch.int))
+        self.resize = torchvision.transforms.Resize(shape)
+
+    def __call__(self, x):
+        if random.getrandbits(1):
+            return x
+
+        x = self.crop(x)
+        return self.resize(x)
+
+class RandomColorJitter:
+    def __init__(self, brightness, contrast, saturation, hue):
+        self.jitter = torchvision.transforms.ColorJitter(brightness, contrast, saturation, hue)
+
+    def __call__(self, x):
+        x = torch.swapaxes(x, 0, 1)
+        for i in range(x.shape[1]):
+            x[:, i:i+1] = self.jitter(x[:, i:i+1])
+        x = torch.swapaxes(x, 0, 1)
+        return x
+
+class RandomOpening:
+    def __call__(self, x):
+        if random.getrandbits(1):
+            return x
+        x = x.cpu().numpy()
+        for i in range(x.shape[0]):
+            x[i] = skimage.morphology.opening(x[i])
+        return torch.from_numpy(x)
+    
+class RandomClosing:
+    def __call__(self, x):
+        if random.getrandbits(1):
+            return x
+        x = x.cpu().numpy()
+        for i in range(x.shape[0]):
+            x[i] = skimage.morphology.closing(x[i])
+        return torch.from_numpy(x)
+
+class RandomGaussianBlur:
+    def __init__(self, channels, kernel_size, sigma_range):
+        self.blurs = [GaussianBlur(channels, kernel_size, sigma) for sigma in np.arange(*sigma_range)]
+
+    def __call__(self, x):
+        return random.choice(self.blurs)(x)
+
+class RandomSharpening:
+    def __init__(self, sharpness_factor):
+        self.sharpen = torchvision.transforms.RandomAdjustSharpness(sharpness_factor)
+
+    def __call__(self, x):
+        x = torch.swapaxes(x, 0, 1)
+        for i in range(x.shape[1]):
+            x[:, i:i+1] = self.sharpen(x[:, i:i+1])
+        x = torch.swapaxes(x, 0, 1)
+        return x
+
 class RandomPixelModifier:
     """
     Creates a random mask where each pixel is included with a
@@ -163,12 +232,17 @@ class GaussianBlur:
     Implementation is inspired by https://discuss.pytorch.org/t/is-there-anyway-to-do-gaussian-filtering-for-an-image-2d-3d-in-pytorch/12351/10
     """
     def __init__(self, channels, kernel_size, sigma):
-        if type(kernel_size) == int:
+        if isinstance(kernel_size, numbers.Number):
             kernel_size = [kernel_size] * 3
-        if type(sigma) == int or type(sigma) == float:
+        if isinstance(sigma, numbers.Number):
             sigma = [sigma] * 3
 
         assert all([x % 2 == 1 for x in kernel_size])
+        self.groups = channels
+        
+        if all([x == 0 for x in sigma]):
+            self.kernel = torch.ones(channels, 1, 1, 1, 1)
+            return
 
         # The gaussian kernel is the product of the
         # gaussian function of each dimension.
@@ -192,7 +266,6 @@ class GaussianBlur:
         kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
 
         self.kernel = kernel
-        self.groups = channels
 
     def __call__(self, x):
         self.kernel = self.kernel.to(x.device)
