@@ -123,6 +123,7 @@ class BrainbowEvaluater:
         self.generator_applier = GeneratorApplier(self.images[0].shape, self.config)
         self.evaluater = SEBrainbow(self.config)
         self.net_out_transform = Scaler(config.generator_output_range[0], config.generator_output_range[1], 0, 1)
+        self.n_aff = len(config.evaluation_config.offsets)
 
         logging.info("Brainbow evaluater created")
 
@@ -141,15 +142,24 @@ class BrainbowEvaluater:
         self.evaluater.find_segmentation_and_eval(outputs, total_iters % self.config.vi_freq == 0)
 
         return summarize_results(self.evaluater.results, self.image_names,
-             [('variation_of_information', 'VI'), ('under_segmentation', 'under_seg'), ('over_segmentation', 'over_seg')],
+             [('variation_of_information', 'VI'), ('under_segmentation', 'under_seg'), ('over_segmentation', 'over_seg'),
+              ('weighted_VI', 'w_VI'), ('weighted_under_seg', 'w_under_seg'), ('weighted_over_seg', 'w_over_seg'),],
              [('foreground_prec', 'fg_prec'), ('foreground_rec', 'fg_rec'), ('foreground_f1', 'fg_f1'),
-              ('foreground_acc', 'fg_acc'), ('foreground_diff', 'fg_diff'), 'affinity_diff'])
-
+              ('foreground_acc', 'fg_acc'), ('foreground_diff', 'fg_diff'), 'affinity_diff',
+              'affinity_prec', 'affinity_rec', 'affinity_f1'] + [f'affinity_diff_{i}' for i in range(self.n_aff)])
 
 def summarize_results(results, image_names, aggregate_metrics: list[str | tuple[str, str]],
                      non_aggregate_metrics: list[str | tuple[str, str]]):
     """
     Summarizes and aggregates the `results` property from either the SEEpithelial or SEBrainbow class.
+
+    Metrics in the `aggregate_metrics` list are averaged for each slice over all evaluations that that were not tweaked
+    on that slice. Metrics can be strings, were the metric will be named the same in the resulting dict or a tuple where
+    the first element is the name in the computed evaluation and the second element is the name under which the loss is
+    returned to the visualizer.
+
+    Metrics in `non_aggregate_metrics` will be extracted for each slice for the evaluation that was tweaked on that
+    slice. The format is the same as for the `aggregate_metrics`.
     """
     scores = defaultdict(lambda: [])
     for evaluation in results['evaluation']:
