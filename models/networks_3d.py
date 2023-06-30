@@ -4,6 +4,8 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 from util.logging_config import logging
+import sys
+from pathlib import Path
 from pytorch_3dunet.pytorch3dunet.unet3d.model import UNet3D, ResidualUNet3D, ResidualUNetSE3D, AbstractUNet
 
 
@@ -297,6 +299,44 @@ class GANLoss(nn.Module):
             else:
                 loss = prediction.mean()
         return loss
+
+class AffinityConsistencyLoss(nn.Module):
+    """
+    A loss that punishes violating affinities.
+    """
+
+    def __init__(self, opt):
+        super().__init__()
+        path = str(Path(__file__).parent.parent.parent)
+        if path not in sys.path:
+            sys.path.append(path)
+
+        from evaluation.evaluate_brainbows import run_mws, get_foreground_mask, segmentation_to_affinities
+        self.run_mws = run_mws
+        self.get_foreground_mask = get_foreground_mask
+        self.segmentation_to_affinities = segmentation_to_affinities
+
+        self.offsets = opt.evaluation_config.offsets
+        self.seperating_channel = opt.evaluation_config.seperating_channel
+
+    def __call__(self, preds):
+        loss = torch.tensor(0, device=preds.device, dtype=torch.float32)
+
+        for pred in preds:
+            np_pred = pred.detach().cpu().numpy()
+            foreground_mask = self.get_foreground_mask(np_pred[1:], np_pred[0], self.offsets, 0.5)
+            segmentation = self.run_mws(np_pred[1:], self.offsets,
+                          stride=(1, 1, 1),
+                          foreground_mask=foreground_mask,
+                          seperating_channel=self.seperating_channel,
+                          invert_dam_channels=True,
+                          randomize_bounds=False)
+            rec = self.segmentation_to_affinities(segmentation, self.offsets)
+            rec = torch.from_numpy(rec).to(preds.device)
+
+            foreground_mask = torch.from_numpy(foreground_mask)
+            loss += ((pred[1:][foreground_mask] - rec[1:][foreground_mask]) ** 2).mean()
+        return loss / preds.shape[0]
 
 
 def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', constant=1.0, lambda_gp=10.0):

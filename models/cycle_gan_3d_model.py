@@ -84,6 +84,15 @@ class CycleGAN3dModel(BaseModel):
         self.loss_names = ['cycle_A', 'cycle_B']
         if not opt.no_adversarial_loss:
             self.loss_names += ['G_A', 'D_A', 'G_B', 'D_B']
+
+        self.use_aff_con = False
+        for extra_loss in opt.extra_losses:
+            if extra_loss['name'] == 'AffinityConsistencyLoss':
+                self.loss_names += ['aff_con']
+                self.use_aff_con = True
+                self.criterionAffCon = networks_3d.AffinityConsistencyLoss(opt)
+                self.aff_con_factor = extra_loss['factor']
+
         # specify the images you want to save and display.
         visual_names_A = ['real_A', 'fake_B', 'rec_A']
         visual_names_B = ['real_B', 'fake_A', 'rec_B']
@@ -271,7 +280,14 @@ class CycleGAN3dModel(BaseModel):
         # Backward cycle loss || G_A(G_B(B)) - B||
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
         # combined loss and calculate gradients
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
+
+        if self.use_aff_con:
+            self.loss_aff_con = self.criterionAffCon(self.fake_B) * self.aff_con_factor
+        else:
+            self.loss_aff_con = 0
+
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + \
+                      self.loss_idt_B + self.loss_aff_con
         self.loss_G.backward()
 
     def optimize_parameters(self):
