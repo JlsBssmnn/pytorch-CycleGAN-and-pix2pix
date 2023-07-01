@@ -7,7 +7,7 @@ import itertools
 from typing import Literal
 
 
-def create_offsets(radius: float, neighborhood: Literal[6, 18, 26], element_size_um=(0.2, 0.1, 0.1)):
+def create_offsets(radius: float, neighborhood: Literal[6, 18, 26], element_size_um=(0.2, 0.1, 0.1), distance=None):
     """
     Creates offset values for an affinity representation. The repulsive offsets are based on a cube with
     the given radius. The neighborhood parameter specifies how many neighbors of a voxel should be considered
@@ -30,9 +30,20 @@ def create_offsets(radius: float, neighborhood: Literal[6, 18, 26], element_size
 
     for i in range(level):
         for combination in itertools.combinations([0, 1, 2], i + 1):
-            offset = [0, 0, 0]
-            for j in combination:
-                offset[j] = int(radius * element_size_um[j])
+            if distance is None:
+                offset = np.array([0, 0, 0])
+                for j in combination:
+                    offset[j] = int(radius * element_size_um[j])
+            elif distance == 'euclidean':
+                offset = np.array([0, 0, 0], dtype=float)
+                for j in combination:
+                    offset[j] = radius
+                offset *= radius / np.linalg.norm(offset)
+                offset *= element_size_um
+                offset = np.round(offset).astype(int)
+            else:
+                raise NotImplementedError(f"Distance {distance} is not implemented")
+
             offsets.append(tuple(offset))
 
     return offsets
