@@ -229,6 +229,10 @@ class CycleGAN3dModel(BaseModel):
             loss_D = (loss_D_real + loss_D_fake) * 0.5
         else:
             loss_D = (loss_D_real + loss_D_fake + loss_D_synthetic_fake) * (1/3)
+
+        if self.opt.gan_mode == 'wgangp':
+            gradient_penalty, _ = networks_3d.cal_gradient_penalty(netD, real, fake, netD.src_device_obj, lambda_gp=self.opt.lambda_gp)
+            loss_D += gradient_penalty
         loss_D.backward()
         return loss_D
 
