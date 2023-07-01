@@ -320,7 +320,8 @@ class AffinityConsistencyLoss(nn.Module):
         self.seperating_channel = opt.evaluation_config.seperating_channel
 
     def __call__(self, preds):
-        loss = torch.tensor(0, device=preds.device, dtype=torch.float32)
+        total_loss = torch.tensor(0, device=preds.device, dtype=torch.float32)
+        n = 0
 
         for pred in preds:
             np_pred = pred.detach().cpu().numpy()
@@ -335,8 +336,14 @@ class AffinityConsistencyLoss(nn.Module):
             rec = torch.from_numpy(rec).to(preds.device)
 
             foreground_mask = torch.from_numpy(foreground_mask)
-            loss += ((pred[1:][foreground_mask] - rec[1:][foreground_mask]) ** 2).mean()
-        return loss / preds.shape[0]
+            loss = ((pred[1:][foreground_mask] - rec[1:][foreground_mask]) ** 2).mean()
+            if not loss.isnan():
+                total_loss += loss
+                n += 1
+
+        if n == 0:
+            return torch.tensor(0, device=preds.device, dtype=torch.float32)
+        return total_loss / n
 
 
 def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', constant=1.0, lambda_gp=10.0):
