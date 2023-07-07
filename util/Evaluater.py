@@ -146,7 +146,7 @@ class BrainbowEvaluater:
               ('weighted_VI', 'w_VI'), ('weighted_under_seg', 'w_under_seg'), ('weighted_over_seg', 'w_over_seg'),],
              [('foreground_prec', 'fg_prec'), ('foreground_rec', 'fg_rec'), ('foreground_f1', 'fg_f1'),
               ('foreground_acc', 'fg_acc'), ('foreground_diff', 'fg_diff'), 'affinity_diff',
-              'affinity_prec', 'affinity_rec', 'affinity_f1'] + [f'affinity_diff_{i}' for i in range(self.n_aff)])
+              'affinity_prec', 'affinity_rec', 'affinity_f1'] + [f'affinity_diff_{i}' for i in range(1, self.n_aff + 1)])
 
 def summarize_results(results, image_names, aggregate_metrics: list[str | tuple[str, str]],
                      non_aggregate_metrics: list[str | tuple[str, str]]):
