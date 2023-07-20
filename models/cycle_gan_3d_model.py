@@ -86,12 +86,15 @@ class CycleGAN3dModel(BaseModel):
             self.loss_names += ['G_A', 'D_A', 'G_B', 'D_B']
 
         self.use_aff_con = False
+        self.cycle_weight_threshold = None
         for extra_loss in opt.extra_losses:
             if extra_loss['name'] == 'AffinityConsistencyLoss':
                 self.loss_names += ['aff_con']
                 self.use_aff_con = True
                 self.criterionAffCon = networks_3d.AffinityConsistencyLoss(opt)
                 self.aff_con_factor = extra_loss['factor']
+            elif extra_loss['name'] == 'weigted_cycle_loss':
+                self.cycle_weight_threshold = extra_loss['threshold']
 
         # specify the images you want to save and display.
         visual_names_A = ['real_A', 'fake_B', 'rec_A']
@@ -153,7 +156,10 @@ class CycleGAN3dModel(BaseModel):
             self.fake_B_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             # define loss functions
             self.criterionGAN = networks_3d.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
+
             self.criterionCycle = torch.nn.L1Loss()
+            self.criterionCycleNoReduction = torch.nn.L1Loss(reduction='none')
+
             self.criterionIdt = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()),
@@ -282,7 +288,12 @@ class CycleGAN3dModel(BaseModel):
         # Forward cycle loss || G_B(G_A(A)) - A||
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||
-        self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
+        if self.cycle_weight_threshold is not None:
+            self.loss_cycle_B = self.criterionCycleNoReduction(self.rec_B, self.real_B) * lambda_B
+            weights = networks_3d.compute_cycle_weight(self.real_B, self.cycle_weight_threshold)
+            self.loss_cycle_B = (self.loss_cycle_B * weights).mean()
+        else:
+            self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
         # combined loss and calculate gradients
 
         if self.use_aff_con:

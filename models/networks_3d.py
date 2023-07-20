@@ -383,6 +383,23 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
         return 0.0, None
 
 
+def compute_cycle_weight(images, threshold, measure='min'):
+    weights = torch.ones_like(images)
+
+    for i, image in enumerate(images):
+        reduced_image = eval(f'torch.{measure}(image, dim=0).values')
+        above_mask = reduced_image >= threshold
+        above = above_mask.sum()
+        below_mask = reduced_image < threshold
+        below = below_mask.sum()
+
+        if above > below:
+            weights[i, :, above_mask] = below / above
+        else:
+            weights[i, :, below_mask] = above / below
+    return weights
+
+
 class ResnetGenerator(nn.Module):
     """Resnet-based generator that consists of Resnet blocks between a few downsampling/upsampling operations.
 
