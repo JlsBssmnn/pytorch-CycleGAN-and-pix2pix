@@ -82,8 +82,10 @@ class CycleGAN3dModel(BaseModel):
 
         assert opt.dataset_mode == 'unaligned_3d'
         self.loss_names = ['cycle_A', 'cycle_B']
-        if not opt.no_adversarial_loss:
-            self.loss_names += ['G_A', 'D_A', 'G_B', 'D_B']
+        if not opt.no_adversarial_loss_A:
+            self.loss_names += ['G_A', 'D_A']
+        if not opt.no_adversarial_loss_B:
+            self.loss_names += ['G_B', 'D_B']
 
         self.use_aff_con = False
         self.cycle_weight_threshold = None
@@ -277,12 +279,15 @@ class CycleGAN3dModel(BaseModel):
             self.loss_idt_A = 0
             self.loss_idt_B = 0
 
-        if self.opt.no_adversarial_loss:
+        if self.opt.no_adversarial_loss_A:
             self.loss_G_A = 0
-            self.loss_G_B = 0
         else:
             # GAN loss D_A(G_A(A))
             self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+
+        if self.opt.no_adversarial_loss_B:
+            self.loss_G_B = 0
+        else:
             # GAN loss D_B(G_B(B))
             self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
         # Forward cycle loss || G_B(G_A(A)) - A||
@@ -315,11 +320,13 @@ class CycleGAN3dModel(BaseModel):
         self.backward_G()             # calculate gradients for G_A and G_B
         self.optimizer_G.step()       # update G_A and G_B's weights
         
-        if self.opt.no_adversarial_loss:
-            return
         # D_A and D_B
         self.set_requires_grad([self.netD_A, self.netD_B], True)
         self.optimizer_D.zero_grad()   # set D_A and D_B's gradients to zero
-        self.backward_D_A()      # calculate gradients for D_A
-        self.backward_D_B()      # calculate gradients for D_B
+
+        if not self.opt.no_adversarial_loss_A:
+            self.backward_D_A()      # calculate gradients for D_A
+        if not self.opt.no_adversarial_loss_B:
+            self.backward_D_B()      # calculate gradients for D_B
+
         self.optimizer_D.step()  # update D_A and D_B's weights
