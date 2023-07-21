@@ -53,6 +53,9 @@ class CycleGAN3dModel(BaseModel):
             parser.add_argument('--disc_transforms_B', type=dict, default=None, help='Transformations that are applied to the real image before it is given to discriminator B')
             parser.add_argument('--real_fake_trans_A', type=dict, default=None, help='Transformations that are applied to the real image, but the result represents a fake image (for discriminator A)')
             parser.add_argument('--real_fake_trans_B', type=dict, default=None, help='Transformations that are applied to the real image, but the result represents a fake image (for discriminator B)')
+            parser.add_argument('--partial_cycle_A', type=bool, default=False, help='If true, the cycle loss A (A -> B -> A) will only be used to optimize generator B')
+            parser.add_argument('--partial_cycle_B', type=bool, default=False, help='If true, the cycle loss B (B -> A -> B) will only be used to optimize generator A')
+            parser.add_argument('--use_transformed_cycle', type=bool, default=True, help='If true, the result from the post transform is fed into the other generator to compute the reconstruction, otherwise the direct output from the generator is used')
 
             parser.add_argument('--disc_1x2x2_kernel_scale', action='store_true', default=False, help='Passed to NLayerDiscriminator')
             parser.add_argument('--disc_extra_xy_conv', action='store_true', default=False, help='Passed to NLayerDiscriminator')
@@ -195,14 +198,22 @@ class CycleGAN3dModel(BaseModel):
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.generator_output_f(self.netG_A(self.real_A))
-        self.raw_fake_B = self.fake_B.detach().clone()
-        self.fake_B = self.post_transform_A(self.fake_B)  # G_A(A)
-        self.rec_A = self.generator_output_f(self.netG_B(self.fake_B))   # G_B(G_A(A))
+        if self.opt.partial_cycle_A:
+            self.raw_fake_B = self.fake_B.detach().clone()
+            self.fake_B = self.post_transform_A(self.fake_B).detach()
+        else:
+            self.raw_fake_B = self.fake_B.clone()
+            self.fake_B = self.post_transform_A(self.fake_B)
+        self.rec_A = self.generator_output_f(self.netG_B(self.fake_B if self.opt.use_transformed_cycle else self.raw_fake_B))   # G_B(G_A(A))
 
         self.fake_A = self.generator_output_f(self.netG_B(self.real_B))
-        self.raw_fake_A = self.fake_A.detach().clone()
-        self.fake_A = self.post_transform_B(self.fake_A)  # G_B(B)
-        self.rec_B = self.generator_output_f(self.netG_A(self.fake_A))   # G_A(G_B(B))
+        if self.opt.partial_cycle_B:
+            self.raw_fake_A = self.fake_A.detach().clone()
+            self.fake_A = self.post_transform_B(self.fake_A).detach()
+        else:
+            self.raw_fake_A = self.fake_A.clone()
+            self.fake_A = self.post_transform_B(self.fake_A)
+        self.rec_B = self.generator_output_f(self.netG_A(self.fake_A if self.opt.use_transformed_cycle else self.raw_fake_A))   # G_A(G_B(B))
 
     def batch_processed(self, batch_size):
         if self.opt.netD == 'progressive':
