@@ -24,8 +24,23 @@ from models import create_model
 from util.get_options import get_training_options
 from util.visualizer import Visualizer
 from util.logging_config import logging
+from pathlib import Path
+
+def get_test_opt(opt):
+    p = Path(opt.evaluation_config.ground_truth_file)
+    opt.evaluation_config.ground_truth_file = '../../data/' + '/'.join(p.parts[p.parts.index('datasets')+1:])
+
+    p = Path(opt.evaluation_config.input_file)
+    opt.evaluation_config.input_file = '../../data/' + '/'.join(p.parts[p.parts.index('datasets')+1:])
+
+    opt.batch_size = min(opt.batch_size, 8)
+    opt.print_freq = 1
+    opt.evaluation_config.eval_freq = 1
+    opt.evaluation_config.vi_freq = 1
 
 def main(opt, test=False):
+    if test:
+        get_test_opt(opt)
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     logging.info('The number of training images = %d' % dataset_size)
