@@ -198,22 +198,22 @@ class CycleGAN3dModel(BaseModel):
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.generator_output_f(self.netG_A(self.real_A))
+        self.raw_fake_B = self.fake_B.clone()
+        self.fake_B = self.post_transform_A(self.fake_B)
+
+        g_b_input = self.fake_B if self.opt.use_transformed_cycle else self.raw_fake_B
         if self.opt.partial_cycle_A:
-            self.raw_fake_B = self.fake_B.detach().clone()
-            self.fake_B = self.post_transform_A(self.fake_B).detach()
-        else:
-            self.raw_fake_B = self.fake_B.clone()
-            self.fake_B = self.post_transform_A(self.fake_B)
-        self.rec_A = self.generator_output_f(self.netG_B(self.fake_B if self.opt.use_transformed_cycle else self.raw_fake_B))   # G_B(G_A(A))
+            g_b_input = g_b_input.detach()
+        self.rec_A = self.generator_output_f(self.netG_B(g_b_input))   # G_B(G_A(A))
 
         self.fake_A = self.generator_output_f(self.netG_B(self.real_B))
+        self.raw_fake_A = self.fake_A.clone()
+        self.fake_A = self.post_transform_B(self.fake_A)
+
+        g_a_input = self.fake_A if self.opt.use_transformed_cycle else self.raw_fake_A
         if self.opt.partial_cycle_B:
-            self.raw_fake_A = self.fake_A.detach().clone()
-            self.fake_A = self.post_transform_B(self.fake_A).detach()
-        else:
-            self.raw_fake_A = self.fake_A.clone()
-            self.fake_A = self.post_transform_B(self.fake_A)
-        self.rec_B = self.generator_output_f(self.netG_A(self.fake_A if self.opt.use_transformed_cycle else self.raw_fake_A))   # G_A(G_B(B))
+            g_a_input = g_a_input.detach()
+        self.rec_B = self.generator_output_f(self.netG_A(g_a_input))   # G_A(G_B(B))
 
     def batch_processed(self, batch_size):
         if self.opt.netD == 'progressive':
@@ -257,7 +257,11 @@ class CycleGAN3dModel(BaseModel):
 
     def backward_D_A(self):
         """Calculate GAN loss for discriminator D_A"""
-        fake_B = self.fake_B_pool.query(self.fake_B)
+        if self.opt.use_transformed_disc:
+            fake_B = self.fake_B_pool.query(self.fake_B)
+        else:
+            fake_B = self.fake_B_pool.query(self.raw_fake_B)
+
         if self.real_fake_trans_A:
             synthetic_fake_B = self.real_fake_trans_A(self.real_B)
         else:
@@ -266,7 +270,11 @@ class CycleGAN3dModel(BaseModel):
 
     def backward_D_B(self):
         """Calculate GAN loss for discriminator D_B"""
-        fake_A = self.fake_A_pool.query(self.fake_A)
+        if self.opt.use_transformed_disc:
+            fake_A = self.fake_A_pool.query(self.fake_A)
+        else:
+            fake_A = self.fake_A_pool.query(self.raw_fake_A)
+
         if self.real_fake_trans_B:
             synthetic_fake_A = self.real_fake_trans_B(self.real_A)
         else:
@@ -294,13 +302,13 @@ class CycleGAN3dModel(BaseModel):
             self.loss_G_A = 0
         else:
             # GAN loss D_A(G_A(A))
-            self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+            self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B if self.opt.use_transformed_disc else self.raw_fake_B), True)
 
         if self.opt.no_adversarial_loss_B:
             self.loss_G_B = 0
         else:
             # GAN loss D_B(G_B(B))
-            self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+            self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A if self.opt.use_transformed_disc else self.raw_fake_A), True)
         # Forward cycle loss || G_B(G_A(A)) - A||
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||
