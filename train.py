@@ -27,16 +27,17 @@ from util.logging_config import logging
 from pathlib import Path
 
 def get_test_opt(opt):
-    p = Path(opt.evaluation_config.ground_truth_file)
-    opt.evaluation_config.ground_truth_file = '../../data/' + '/'.join(p.parts[p.parts.index('datasets')+1:])
+    if opt.evaluation_config is not None:
+        p = Path(opt.evaluation_config.ground_truth_file)
+        opt.evaluation_config.ground_truth_file = '../../data/' + '/'.join(p.parts[p.parts.index('datasets')+1:])
 
-    p = Path(opt.evaluation_config.input_file)
-    opt.evaluation_config.input_file = '../../data/' + '/'.join(p.parts[p.parts.index('datasets')+1:])
+        p = Path(opt.evaluation_config.input_file)
+        opt.evaluation_config.input_file = '../../data/' + '/'.join(p.parts[p.parts.index('datasets')+1:])
+        opt.evaluation_config.eval_freq = 1
+        opt.evaluation_config.vi_freq = 1
 
     opt.batch_size = min(opt.batch_size, 8)
     opt.print_freq = 1
-    opt.evaluation_config.eval_freq = 1
-    opt.evaluation_config.vi_freq = 1
 
 def main(opt, test=False):
     if test:

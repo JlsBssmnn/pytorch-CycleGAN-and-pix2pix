@@ -10,58 +10,7 @@ from pathlib import Path
 from util.logging_config import logging
 import bdb
 
-from util.my_utils import object_to_dict
-
-class Encoder(json.JSONEncoder):
-    def default(self, obj):
-        try:
-            return super().default(obj)
-        except TypeError:
-            return str(obj)
-
-def getattr_r_no_except(obj, attr):
-    """
-    Recursively get an attribute of an object. Different attributes can be separated by a period.
-    This function will not throw an attribute error if the attribute doesn't exist. Instead, it
-    return the attribute error.
-    """
-    parts = attr.split('.')
-    assert len(parts) >= 1
-
-    if not hasattr(obj, parts[0]):
-        return AttributeError(f"'{obj.__class__.__name__}' object has no attribute '{parts[0]}'")
-    attribute = getattr(obj, parts[0])
-
-    for part in parts[1:]:
-        if not hasattr(attribute, part):
-            return AttributeError(f"'{attribute.__class__.__name__}' object has no attribute '{part}'")
-        attribute = getattr(attribute, part)
-    return attribute
-
-def getattr_r(obj, attr):
-    """
-    Recursively get an attribute of an object. Different attributes can be separated by a period.
-    """
-    parts = attr.split('.')
-    assert len(parts) >= 1
-    attribute = getattr(obj, parts[0])
-
-    for part in parts[1:]:
-        attribute = getattr(attribute, part)
-    return attribute
-
-def setattr_r(obj, attr, value):
-    """
-    Recursively set an attribute of an object. Different attributes can be separated by a period.
-    """
-    parts = attr.split('.')
-    assert len(parts) >= 1
-    attribute = obj
-
-    for part in parts[:-1]:
-        attribute = getattr(attribute, part)
-
-    setattr(attribute, parts[-1], value)
+from util.my_utils import Encoder, object_to_dict, setattr_r
 
 class GridParameterManager:
     def __init__(self, config, grid):

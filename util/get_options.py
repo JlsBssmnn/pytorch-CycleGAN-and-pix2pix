@@ -1,5 +1,5 @@
 import argparse
-import importlib
+from helpers.config_fix import fix_config
 from options.train_options import TrainOptions
 from util.logging_config import logging
 from contextlib import contextmanager,redirect_stderr,redirect_stdout
@@ -24,7 +24,8 @@ def get_training_options():
     try:
         with suppress_stdout_stderr():
             args = parser.parse_args()
+        config = fix_config('config.' + args.config)
         logging.info('Loaded configuration %s', args.config)
-        return importlib.import_module('config.' + args.config).config, args.test
+        return config, args.test
     except SystemExit:
         return TrainOptions().parse(), False   # get training options
